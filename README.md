@@ -111,4 +111,5 @@ The installer redistributes **FFmpeg** under the **GPL v3**. FlowClip invokes it
 executable and contains no FFmpeg code, so the two remain separate works. The GPL build is
 used because H.264 export depends on `libx264`, which LGPL builds omit. Source and build
 scripts: [FFmpeg](https://github.com/FFmpeg/FFmpeg),
-[BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds). Full notices in [LICENSE](LICENSE).
+[BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds). Full details in
+[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).

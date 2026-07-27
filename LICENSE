@@ -19,25 +19,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-THIRD-PARTY COMPONENTS
-
-FlowClip's own source code is MIT licensed as above. The Windows installer also
-redistributes the following, which carry their own terms:
-
-FFmpeg (ffmpeg.exe, ffprobe.exe)
-  Licence : GNU General Public License v3 or later
-  Build   : https://github.com/BtbN/FFmpeg-Builds  (win64-gpl)
-  Source  : https://github.com/FFmpeg/FFmpeg
-  Licence text: https://www.gnu.org/licenses/gpl-3.0.html
-
-  FlowClip invokes FFmpeg as a separate executable and contains no FFmpeg code,
-  so the two remain separate works. The GPL build is used because H.264 export
-  depends on libx264, which is not present in LGPL builds. The complete
-  corresponding source for the bundled binaries is available at the FFmpeg
-  repository above, and the exact build scripts at the BtbN repository.
-
-Electron, React and the other npm dependencies are distributed under their own
-licences; see the respective packages for details.
