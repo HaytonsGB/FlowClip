@@ -6,6 +6,10 @@ directories:
   output: release
   buildResources: build
 
+# Stamps the exe icon with rcedit, replacing the built-in step that needs a
+# toolchain Windows cannot extract without elevation.
+afterPack: scripts/after-pack.cjs
+
 files:
   - out/**/*
   - package.json
@@ -27,12 +31,12 @@ win:
   target:
     - target: nsis
       arch: [x64]
-  icon: build/icon.png
+  # Hand-built multi-size ico; see scripts/make-ico.mjs for why not a png.
+  icon: build/icon.ico
   artifactName: FlowClip-Setup-${version}.${ext}
-  # Skips the winCodeSign toolchain, whose archive contains macOS symlinks that
-  # Windows refuses to create without Developer Mode or elevation. We do not
-  # sign, so the only loss is icon/version metadata stamped into the exe — the
-  # window and taskbar icon still come from BrowserWindow at runtime.
+  # Built-in exe editing needs the winCodeSign toolchain, whose archive holds
+  # macOS symlinks Windows refuses to create without elevation. The afterPack
+  # hook does the same job with rcedit instead.
   signAndEditExecutable: false
 
 nsis:
