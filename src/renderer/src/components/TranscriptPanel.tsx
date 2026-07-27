@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { CaptionWord } from '../../../shared/types'
 import { groupIntoLines, type CaptionLine } from '../../../shared/captions'
-import { TrashIcon } from './Icons'
+import { TrashIcon, PlusIcon } from './Icons'
 import { formatTime } from '../lib/format'
 
 interface Props {
@@ -12,6 +12,7 @@ interface Props {
   onEditWord: (index: number, text: string) => void
   onRemoveWord: (index: number) => void
   onSeek: (sec: number) => void
+  onAddLine: () => void
 }
 
 /**
@@ -25,7 +26,8 @@ export function TranscriptPanel({
   onEditLine,
   onEditWord,
   onRemoveWord,
-  onSeek
+  onSeek,
+  onAddLine
 }: Props): JSX.Element {
   const [mode, setMode] = useState<'line' | 'word'>('line')
   const lines = useMemo(() => groupIntoLines(words, wordsPerLine), [words, wordsPerLine])
@@ -53,7 +55,11 @@ export function TranscriptPanel({
       </div>
 
       <div className="layers-list">
-        {words.length === 0 && <p className="layers-empty">No captions yet.</p>}
+        {words.length === 0 && (
+          <p className="layers-empty">
+            No captions yet. Generate them, or add your own line at the playhead.
+          </p>
+        )}
 
         {mode === 'line'
           ? lines.map((line) => {
@@ -108,6 +114,14 @@ export function TranscriptPanel({
             </div>
           )}
       </div>
+
+      <button
+        className="btn small add-layer"
+        onClick={onAddLine}
+        title={`Insert a caption at ${formatTime(currentSec)}`}
+      >
+        <PlusIcon size={14} /> Add line at {formatTime(currentSec)}
+      </button>
     </aside>
   )
 }

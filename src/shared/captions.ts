@@ -89,6 +89,37 @@ export function retimeLine(line: CaptionLine, text: string): CaptionWord[] {
   })
 }
 
+const NEW_LINE_SEC = 1.6
+
+/**
+ * Inserts a caption of your own at `atSec`, timed from the playhead.
+ *
+ * The transcript is kept in time order because every consumer — grouping,
+ * windows, the ASS writer — walks it sequentially. The new caption is trimmed to
+ * whatever room exists before the next existing word so it cannot overlap one.
+ */
+export function insertCaption(
+  words: CaptionWord[],
+  atSec: number,
+  text = 'New caption'
+): CaptionWord[] {
+  const parts = text.trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return words
+
+  const next = words.find((w) => w.start > atSec)
+  const room = next ? Math.max(0.3, next.start - atSec) : NEW_LINE_SEC
+  const span = Math.min(NEW_LINE_SEC, room)
+  const per = span / parts.length
+
+  const inserted = parts.map((part, i) => ({
+    text: part,
+    start: atSec + i * per,
+    end: atSec + (i + 1) * per
+  }))
+
+  return [...words, ...inserted].sort((a, b) => a.start - b.start)
+}
+
 /** Replaces the words of one line within the full transcript. */
 export function replaceLine(
   words: CaptionWord[],

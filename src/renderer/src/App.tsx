@@ -24,7 +24,7 @@ import {
 import { CaptionsPanel, type CaptionJob } from './components/CaptionsPanel'
 import { TranscriptPanel } from './components/TranscriptPanel'
 import { CaptionHandle } from './components/CaptionHandle'
-import { retimeLine, replaceLine } from '../../shared/captions'
+import { retimeLine, replaceLine, insertCaption } from '../../shared/captions'
 import { RegionRect } from './components/RegionRect'
 import { LayersPanel } from './components/LayersPanel'
 import { OutputPreview } from './components/OutputPreview'
@@ -670,7 +670,9 @@ function App(): JSX.Element {
             </div>
           )}
 
-          {tool === 'captions' && words.length > 0 && (
+          {/* Available even with no transcript, so captions can be written by
+              hand on a clip that has no speech to transcribe. */}
+          {tool === 'captions' && (
             <TranscriptPanel
               words={words}
               wordsPerLine={capStyle.wordsPerLine}
@@ -683,6 +685,7 @@ function App(): JSX.Element {
                 setWords((ws) => ws.map((w, j) => (j === i ? { ...w, text } : w)))
               }
               onRemoveWord={(i) => setWords((ws) => ws.filter((_, j) => j !== i))}
+              onAddLine={() => setWords((ws) => insertCaption(ws, current))}
             />
           )}
 

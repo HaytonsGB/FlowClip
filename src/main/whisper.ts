@@ -171,6 +171,13 @@ export async function transcribe(
     // happens per token, which can cut a word into pieces mid-caption.
     '-ml', '1',
     '-sow',
+    // Whisper normally feeds each segment the previous text as context, which is
+    // what makes it loop — repeating a phrase over and over to fill a stretch it
+    // cannot hear. Dropping that context breaks the loop, and suppressing
+    // non-speech tokens keeps game audio from being transcribed as words.
+    // Verified no quality cost on clean speech: byte-identical transcript.
+    '-mc', '0',
+    '--suppress-nst',
     '-oj',
     '-of', outBase,
     '--no-prints'
