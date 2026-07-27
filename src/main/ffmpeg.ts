@@ -183,6 +183,49 @@ export function buildExportArgs(req: ExportRequest): string[] {
   return args
 }
 
+/**
+ * Renders a white-on-black rounded-rectangle mask, cached by size and radius.
+ *
+ * ffmpeg has no round-rect primitive, so the shape comes from a per-pixel `geq`
+ * expression. That is far too slow to run per frame, but rendering one still
+ * image and alpha-merging it costs nothing.
+ */
+async function roundedMask(w: number, h: number, radius: number): Promise<string> {
+  const { ffmpegPath } = toolStatus()
+  if (!ffmpegPath) throw new Error('ffmpeg not found')
+
+  const outDir = join(app.getPath('temp'), 'flowclip-masks')
+  mkdirSync(outDir, { recursive: true })
+  const outPath = join(outDir, `mask_${w}x${h}_r${radius}.png`)
+  if (existsSync(outPath)) return outPath
+
+  const r = radius
+  const rx = w - r
+  const by = h - r
+  // Opaque everywhere except outside the quarter-circle at each corner.
+  const expr =
+    `if(lt(X,${r})*lt(Y,${r}),if(lte(hypot(${r}-X,${r}-Y),${r}),255,0),` +
+    `if(gt(X,${rx})*lt(Y,${r}),if(lte(hypot(X-${rx},${r}-Y),${r}),255,0),` +
+    `if(lt(X,${r})*gt(Y,${by}),if(lte(hypot(${r}-X,Y-${by}),${r}),255,0),` +
+    `if(gt(X,${rx})*gt(Y,${by}),if(lte(hypot(X-${rx},Y-${by}),${r}),255,0),255))))`
+
+  const args = [
+    '-hide_banner', '-loglevel', 'error', '-y',
+    '-f', 'lavfi', '-i', `color=c=black:s=${w}x${h}`,
+    '-vf', `format=gray,geq=lum='${expr}'`,
+    '-frames:v', '1',
+    outPath
+  ]
+
+  await new Promise<void>((resolve, reject) => {
+    execFile(ffmpegPath, args, (err, _o, stderr) => {
+      if (err) reject(new Error(stderr || err.message))
+      else resolve()
+    })
+  })
+  return outPath
+}
+
 /** yuv420p needs even dimensions, and crop offsets must stay inside the frame. */
 function evenClamp(value: number, max: number): number {
   const v = Math.round(value / 2) * 2
@@ -207,7 +250,7 @@ function toPixels(rect: Rect, W: number, H: number): { x: number; y: number; w: 
  * order. This is what lets a vertical export keep the facecam, the gameplay and
  * the minimap instead of centre-cropping to one of them.
  */
-export function buildCompositeArgs(req: CompositeExportRequest): string[] {
+export async function buildCompositeArgs(req: CompositeExportRequest): Promise<string[]> {
   const { regions, srcWidth, srcHeight, canvas } = req
   if (regions.length === 0) throw new Error('Add at least one box to the layout')
 
@@ -218,41 +261,67 @@ export function buildCompositeArgs(req: CompositeExportRequest): string[] {
   const labels = regions.map((_, i) => `[s${i}]`).join('')
   steps.push(`[0:v]split=${regions.length}${labels}`)
 
-  regions.forEach((region, i) => {
+  /** Mask images become extra inputs, so input 0 stays the video. */
+  const maskInputs: string[] = []
+
+  for (const [i, region] of regions.entries()) {
     const s = toPixels(region.src, srcWidth, srcHeight)
     const d = toPixels(region.dst, canvas.w, canvas.h)
     const crop = `crop=${s.w}:${s.h}:${s.x}:${s.y}`
     const fill = `scale=${d.w}:${d.h}:force_original_aspect_ratio=increase,crop=${d.w}:${d.h}`
+    const shaped = `sh${i}`
 
     if (region.fit !== 'contain') {
-      steps.push(`[s${i}]${crop},${fill},setsar=1[r${i}]`)
-      return
-    }
-
-    const shrink = `scale=${d.w}:${d.h}:force_original_aspect_ratio=decrease`
-
-    if (region.backdrop === 'black') {
+      steps.push(`[s${i}]${crop},${fill},setsar=1[${shaped}]`)
+    } else if (region.backdrop === 'black') {
       steps.push(
-        `[s${i}]${crop},${shrink},` +
-          `pad=${d.w}:${d.h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1[r${i}]`
+        `[s${i}]${crop},scale=${d.w}:${d.h}:force_original_aspect_ratio=decrease,` +
+          `pad=${d.w}:${d.h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1[${shaped}]`
       )
-      return
+    } else {
+      // Blurred backdrop: one copy fills the slot and is blurred, the other
+      // keeps the whole frame and sits centred on top.
+      const bw = Math.max(16, evenClamp(d.w / 8, d.w))
+      const bh = Math.max(16, evenClamp(d.h / 8, d.h))
+      steps.push(`[s${i}]split=2[a${i}][b${i}]`)
+      steps.push(
+        // Blurring a downscaled copy then scaling back up is far cheaper than
+        // blurring at full size, and indistinguishable once soft.
+        `[a${i}]${crop},scale=${bw}:${bh}:force_original_aspect_ratio=increase,crop=${bw}:${bh},` +
+          `gblur=sigma=6,scale=${d.w}:${d.h},eq=brightness=-0.07:saturation=1.1,setsar=1[bg${i}]`
+      )
+      steps.push(
+        `[b${i}]${crop},scale=${d.w}:${d.h}:force_original_aspect_ratio=decrease,setsar=1[fg${i}]`
+      )
+      steps.push(`[bg${i}][fg${i}]overlay=(W-w)/2:(H-h)/2[${shaped}]`)
     }
 
-    // Blurred backdrop: one copy fills the slot and is blurred, the other keeps
-    // the whole frame and sits centred on top.
-    const bw = Math.max(16, evenClamp(d.w / 8, d.w))
-    const bh = Math.max(16, evenClamp(d.h / 8, d.h))
-    steps.push(`[s${i}]split=2[a${i}][b${i}]`)
-    steps.push(
-      // Blurring a downscaled copy then scaling back up is far cheaper than
-      // blurring at full size, and the result is indistinguishable once soft.
-      `[a${i}]${crop},scale=${bw}:${bh}:force_original_aspect_ratio=increase,crop=${bw}:${bh},` +
-        `gblur=sigma=6,scale=${d.w}:${d.h},eq=brightness=-0.07:saturation=1.1,setsar=1[bg${i}]`
+    // Border and rounded corners apply to the finished slot-sized layer.
+    const shorter = Math.min(d.w, d.h)
+    const borderPx = Math.round((region.border ?? 0) * shorter)
+    const radiusPx = Math.min(
+      Math.floor(shorter / 2),
+      Math.round((region.radius ?? 0) * shorter)
     )
-    steps.push(`[b${i}]${crop},${shrink},setsar=1[fg${i}]`)
-    steps.push(`[bg${i}][fg${i}]overlay=(W-w)/2:(H-h)/2[r${i}]`)
-  })
+
+    let current = shaped
+    if (borderPx > 0) {
+      steps.push(
+        `[${current}]drawbox=x=0:y=0:w=iw:h=ih:color=white@1:t=${borderPx}[bd${i}]`
+      )
+      current = `bd${i}`
+    }
+
+    if (radiusPx > 1) {
+      const maskPath = await roundedMask(d.w, d.h, radiusPx)
+      const maskIndex = maskInputs.length + 1
+      maskInputs.push(maskPath)
+      steps.push(`[${current}]format=rgba[rg${i}]`)
+      steps.push(`[rg${i}][${maskIndex}:v]alphamerge[r${i}]`)
+    } else {
+      steps.push(`[${current}]null[r${i}]`)
+    }
+  }
 
   // Chain the overlays: bg + r0 -> o0, o0 + r1 -> o1, ...
   regions.forEach((region, i) => {
@@ -262,12 +331,15 @@ export function buildCompositeArgs(req: CompositeExportRequest): string[] {
   })
 
   const finalLabel = `[o${regions.length - 1}]`
+  // -loop keeps each still mask supplying frames for the whole clip.
+  const maskArgs = maskInputs.flatMap((p) => ['-loop', '1', '-i', p])
 
   return [
     '-hide_banner',
     '-y',
     '-ss', req.startSec.toFixed(3),
     '-i', req.inputPath,
+    ...maskArgs,
     '-t', duration.toFixed(3),
     '-filter_complex', steps.join(';'),
     '-map', finalLabel,
@@ -308,15 +380,12 @@ export function runExport(
   )
 }
 
-export function runCompositeExport(
+export async function runCompositeExport(
   req: CompositeExportRequest,
   onProgress: (p: ExportProgress) => void
 ): Promise<void> {
-  return runFfmpeg(
-    buildCompositeArgs(req),
-    Math.max(0.05, req.endSec - req.startSec),
-    onProgress
-  )
+  const args = await buildCompositeArgs(req)
+  return runFfmpeg(args, Math.max(0.05, req.endSec - req.startSec), onProgress)
 }
 
 function runFfmpeg(

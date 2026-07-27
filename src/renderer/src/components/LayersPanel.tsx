@@ -1,4 +1,5 @@
 import type { Region, FitMode, BackdropMode } from '../../../shared/types'
+import { RADIUS_STEPS, BORDER_STEPS } from '../../../shared/types'
 import { PlusIcon, TrashIcon, ArrowUpIcon, ArrowDownIcon } from './Icons'
 
 interface Props {
@@ -10,6 +11,15 @@ interface Props {
   onAdd: () => void
   onFit: (id: string, fit: FitMode) => void
   onBackdrop: (id: string, backdrop: BackdropMode) => void
+  onStyle: (id: string, patch: { radius?: number; border?: number }) => void
+}
+
+/** Closest step to the current value, so the right chip reads as selected. */
+function nearestStep(steps: { value: number }[], value: number): number {
+  return steps.reduce(
+    (best, s) => (Math.abs(s.value - value) < Math.abs(best - value) ? s.value : best),
+    steps[0].value
+  )
 }
 
 /**
@@ -25,7 +35,8 @@ export function LayersPanel({
   onRemove,
   onAdd,
   onFit,
-  onBackdrop
+  onBackdrop,
+  onStyle
 }: Props): JSX.Element {
   const top = [...regions].reverse()
 
@@ -119,6 +130,41 @@ export function LayersPanel({
                   >
                     Black
                   </button>
+                </div>
+              )}
+
+              {/* Styling only on the selected layer, to keep the rail readable. */}
+              {selectedId === r.id && (
+                <div className="layer-style" onClick={(e) => e.stopPropagation()}>
+                  <span className="style-label">Corners</span>
+                  <div className="fit-toggle">
+                    {RADIUS_STEPS.map((s) => (
+                      <button
+                        key={s.id}
+                        className={`fit-opt ${
+                          nearestStep(RADIUS_STEPS, r.radius ?? 0) === s.value ? 'on' : ''
+                        }`}
+                        onClick={() => onStyle(r.id, { radius: s.value })}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <span className="style-label">Border</span>
+                  <div className="fit-toggle">
+                    {BORDER_STEPS.map((s) => (
+                      <button
+                        key={s.id}
+                        className={`fit-opt ${
+                          nearestStep(BORDER_STEPS, r.border ?? 0) === s.value ? 'on' : ''
+                        }`}
+                        onClick={() => onStyle(r.id, { border: s.value })}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

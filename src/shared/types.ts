@@ -60,6 +60,10 @@ export interface Region {
   fit?: FitMode
   /** Only meaningful when `fit` is 'contain'. Defaults to 'blur'. */
   backdrop?: BackdropMode
+  /** Corner radius as a fraction of the slot's shorter side. 0 = square. */
+  radius?: number
+  /** Border thickness as a fraction of the slot's shorter side. 0 = none. */
+  border?: number
   /**
    * Keep `src` locked to the centred crop that exactly fills `dst`. Set on
    * gameplay boxes so the main action never needs to be eyeballed, and cleared
@@ -67,6 +71,19 @@ export interface Region {
    */
   auto?: boolean
 }
+
+/** Preset steps for the corner and border controls. */
+export const RADIUS_STEPS = [
+  { id: 'sharp', label: 'Sharp', value: 0 },
+  { id: 'soft', label: 'Soft', value: 0.06 },
+  { id: 'round', label: 'Round', value: 0.16 }
+]
+
+export const BORDER_STEPS = [
+  { id: 'none', label: 'None', value: 0 },
+  { id: 'thin', label: 'Thin', value: 0.01 },
+  { id: 'thick', label: 'Thick', value: 0.025 }
+]
 
 /**
  * The centred source crop whose aspect matches a destination slot — the largest

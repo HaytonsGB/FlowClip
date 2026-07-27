@@ -123,9 +123,14 @@ export function RegionRect({
             next = { x: edgeL, y: edgeT, w: right - edgeL, h: bottom - edgeT }
           }
 
-          if (lockAspect && lockAspect > 0) {
-            // Derive height from width so the box keeps the output slot's shape.
-            const h = clamp(next.w / lockAspect, MIN, 1)
+          // Shift keeps the box's on-screen shape. Normalised units are not
+          // square, so the ratio is measured in pixels.
+          const ratio =
+            ev.shiftKey && start.h > 0
+              ? (start.w * bounds.width) / (start.h * bounds.height)
+              : lockAspect
+          if (ratio && ratio > 0) {
+            const h = clamp((next.w * bounds.width) / (ratio * bounds.height), MIN, 1)
             if (mode === 'ne' || mode === 'nw') next.y = clamp(bottom - h, 0, 1 - h)
             next.h = h
           }

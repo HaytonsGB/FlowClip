@@ -76,6 +76,19 @@ function App(): JSX.Element {
   /** null on 'source', which means "no compositing, just trim". */
   const canvasDims = aspect === 'source' ? null : ASPECT_DIMS[aspect]
 
+  const updateRegion = useCallback((id: string, patch: Partial<Region>) => {
+    setRegions((rs) =>
+      rs.map((r) =>
+        r.id === id
+          ? // Dragging the source by hand means it is no longer auto-centred.
+            { ...r, ...patch, ...(patch.src ? { auto: false } : {}) }
+          : r
+      )
+    )
+    setPresetDirty(true)
+    setRevision((n) => n + 1)
+  }, [])
+
   /** Element box. The picture inside it is letterboxed by object-fit: contain. */
   useEffect(() => {
     const el = videoRef.current
@@ -231,32 +244,48 @@ function App(): JSX.Element {
         setInSec(clamp(current, 0, outSec - 0.1))
       } else if (e.key === 'o' || e.key === 'O') {
         setOutSec(clamp(current, inSec + 0.1, meta.durationSec))
-      } else if (e.key === 'ArrowLeft') {
-        seek(clamp(current - (e.shiftKey ? 5 : 1 / 30), 0, meta.durationSec))
-      } else if (e.key === 'ArrowRight') {
-        seek(clamp(current + (e.shiftKey ? 5 : 1 / 30), 0, meta.durationSec))
+      } else if (e.key.startsWith('Arrow')) {
+        // In Layout the arrows nudge the selected box; elsewhere they scrub.
+        const region = tool === 'layout' ? regions.find((r) => r.id === selectedRegion) : null
+        if (region) {
+          e.preventDefault()
+          const step = e.shiftKey ? 0.05 : 0.004
+          const dx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0
+          const dy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0
+          updateRegion(region.id, {
+            dst: {
+              ...region.dst,
+              x: clamp(region.dst.x + dx, 0, 1 - region.dst.w),
+              y: clamp(region.dst.y + dy, 0, 1 - region.dst.h)
+            }
+          })
+          return
+        }
+        if (e.key === 'ArrowLeft') {
+          seek(clamp(current - (e.shiftKey ? 5 : 1 / 30), 0, meta.durationSec))
+        } else if (e.key === 'ArrowRight') {
+          seek(clamp(current + (e.shiftKey ? 5 : 1 / 30), 0, meta.durationSec))
+        }
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [meta, current, inSec, outSec, togglePlay, seek])
+  }, [
+    meta,
+    current,
+    inSec,
+    outSec,
+    togglePlay,
+    seek,
+    tool,
+    regions,
+    selectedRegion,
+    updateRegion
+  ])
 
   const missingTools = tools && !tools.ready
   const guide = cropGuide(meta, aspect)
   const outBox = useFit(outPaneRef, canvasDims ? canvasDims.w / canvasDims.h : 1)
-
-  const updateRegion = useCallback((id: string, patch: Partial<Region>) => {
-    setRegions((rs) =>
-      rs.map((r) =>
-        r.id === id
-          ? // Dragging the source by hand means it is no longer auto-centred.
-            { ...r, ...patch, ...(patch.src ? { auto: false } : {}) }
-          : r
-      )
-    )
-    setPresetDirty(true)
-    setRevision((n) => n + 1)
-  }, [])
 
   /** Resolve any auto-centred boxes against the real source and canvas sizes. */
   const centreAuto = useCallback(
@@ -347,6 +376,12 @@ function App(): JSX.Element {
 
   const setBackdrop = useCallback((id: string, backdrop: BackdropMode) => {
     setRegions((rs) => rs.map((r) => (r.id === id ? { ...r, backdrop } : r)))
+    setPresetDirty(true)
+    setRevision((n) => n + 1)
+  }, [])
+
+  const setStyle = useCallback((id: string, patch: { radius?: number; border?: number }) => {
+    setRegions((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)))
     setPresetDirty(true)
     setRevision((n) => n + 1)
   }, [])
@@ -559,6 +594,7 @@ function App(): JSX.Element {
               onAdd={addRegion}
               onFit={setFit}
               onBackdrop={setBackdrop}
+              onStyle={setStyle}
             />
           )}
           </section>

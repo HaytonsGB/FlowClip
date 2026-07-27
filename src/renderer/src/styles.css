@@ -692,6 +692,26 @@ body {
   color: var(--violet);
 }
 
+.layer-style {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--line);
+}
+
+.style-label {
+  display: block;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--dim);
+  margin-bottom: 3px;
+}
+
+.style-label + .fit-toggle {
+  margin-bottom: 6px;
+}
+
 .add-layer {
   justify-content: center;
   flex-shrink: 0;

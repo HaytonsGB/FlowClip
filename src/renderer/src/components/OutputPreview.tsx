@@ -58,7 +58,17 @@ export function OutputPreview({ videoRef, regions, canvas, revision }: Props): J
           const dh = region.dst.h * canvas.h
           if (dw < 1 || dh < 1) continue
 
+          const shorter = Math.min(dw, dh)
+          const radius = Math.min(shorter / 2, (region.radius ?? 0) * shorter)
+          const border = (region.border ?? 0) * shorter
+
           try {
+            // Clip to the rounded slot so corners match the exported mask.
+            ctx.save()
+            ctx.beginPath()
+            ctx.roundRect(dx, dy, dw, dh, radius)
+            ctx.clip()
+
             if (region.fit === 'contain') {
               const sw = region.src.w * vw
               const sh = region.src.h * vh
@@ -94,8 +104,20 @@ export function OutputPreview({ videoRef, regions, canvas, revision }: Props): J
               const [sx, sy, sw, sh] = coverCrop(region.src, vw, vh, dw / dh)
               ctx.drawImage(video, sx, sy, sw, sh, dx, dy, dw, dh)
             }
+
+            if (border > 0) {
+              // Stroked inside the clip, so only the inner half shows — the
+              // same result as ffmpeg's drawbox on the slot.
+              ctx.lineWidth = border * 2
+              ctx.strokeStyle = '#ffffff'
+              ctx.beginPath()
+              ctx.roundRect(dx, dy, dw, dh, radius)
+              ctx.stroke()
+            }
+            ctx.restore()
           } catch {
             // Frame not decodable yet; the next tick will pick it up.
+            ctx.restore()
           }
         }
       }
