@@ -1,6 +1,6 @@
 appId: com.flowclip.app
 productName: FlowClip
-copyright: Copyright © 2026 HaytonsGB
+copyright: Copyright (c) 2026 HaytonsGB
 
 directories:
   output: release
@@ -21,6 +21,9 @@ files:
 extraResources:
   - from: resources/bin
     to: bin
+    filter: ['**/*']
+  - from: resources/whisper
+    to: whisper
     filter: ['**/*']
   - from: resources/logo.png
     to: logo.png

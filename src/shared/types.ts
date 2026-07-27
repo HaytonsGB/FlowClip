@@ -247,6 +247,56 @@ export function newRegion(label = 'Box'): Region {
   }
 }
 
+/** One word with its timing on the source timeline, in seconds. */
+export interface CaptionWord {
+  text: string
+  start: number
+  end: number
+}
+
+export type WhisperModelId = 'tiny.en' | 'base.en' | 'small.en'
+
+export interface WhisperModelMeta {
+  file: string
+  url: string
+  label: string
+  sizeMb: number
+  note: string
+}
+
+const HF = 'https://huggingface.co/ggerganov/whisper.cpp/resolve/main'
+
+export const WHISPER_MODELS: Record<WhisperModelId, WhisperModelMeta> = {
+  'tiny.en': {
+    file: 'ggml-tiny.en.bin',
+    url: `${HF}/ggml-tiny.en.bin`,
+    label: 'Tiny',
+    sizeMb: 75,
+    note: 'Fastest, roughest — fine for clear speech'
+  },
+  'base.en': {
+    file: 'ggml-base.en.bin',
+    url: `${HF}/ggml-base.en.bin`,
+    label: 'Base',
+    sizeMb: 142,
+    note: 'Good balance — recommended'
+  },
+  'small.en': {
+    file: 'ggml-small.en.bin',
+    url: `${HF}/ggml-small.en.bin`,
+    label: 'Small',
+    sizeMb: 466,
+    note: 'Most accurate, noticeably slower'
+  }
+}
+
+export interface ModelProgress {
+  received: number
+  total: number
+  /** 0..1 */
+  percent: number
+}
+
 export interface CompositeExportRequest {
   inputPath: string
   outputPath: string
