@@ -859,6 +859,137 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* ---------- clip strip ---------- */
+.clipstrip {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.clipstrip-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.clipstrip-total {
+  font-size: 10.5px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.clipstrip-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.clipcard {
+  position: relative;
+  flex: 0 0 152px;
+  height: 54px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background-color: rgba(20, 26, 46, 0.9);
+  background-size: cover;
+  background-position: center;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.clipcard:hover {
+  border-color: var(--line-bright);
+}
+
+.clipcard.active {
+  border-color: var(--cyan);
+  box-shadow: 0 0 18px rgba(34, 224, 240, 0.3);
+}
+
+/* Scrim so the filmstrip behind never swallows the label. */
+.clipcard-info {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 4px 7px;
+  background: linear-gradient(180deg, transparent, rgba(5, 7, 16, 0.92));
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.clipcard-name {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.clipcard-dur {
+  font-size: 10px;
+  color: var(--cyan);
+  font-variant-numeric: tabular-nums;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.clipcard-index {
+  position: absolute;
+  top: 4px;
+  left: 5px;
+  font-size: 9.5px;
+  font-weight: 750;
+  color: var(--text);
+  background: rgba(5, 7, 16, 0.8);
+  border-radius: 4px;
+  padding: 0 5px;
+}
+
+.clipcard-actions {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  display: flex;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity 0.14s;
+}
+
+.clipcard:hover .clipcard-actions {
+  opacity: 1;
+}
+
+.clipcard-actions .icon-btn {
+  background: rgba(5, 7, 16, 0.78);
+  padding: 2px;
+}
+
+.clipcard.add {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  flex: 0 0 96px;
+  border-style: dashed;
+  border-color: rgba(157, 123, 255, 0.4);
+  color: var(--dim);
+  font-size: 10.5px;
+  font-family: inherit;
+  background-image: none;
+}
+
+.clipcard.add:hover {
+  color: var(--violet);
+  border-color: var(--violet);
+  background-color: rgba(157, 123, 255, 0.08);
+}
+
 /* ---------- time ruler ---------- */
 .ruler {
   position: relative;

@@ -7,10 +7,10 @@ import type {
   Region,
   FitMode,
   BackdropMode,
-  CaptionWord,
   CaptionStyle,
   CaptionPreset,
-  WhisperModelId
+  WhisperModelId,
+  Clip
 } from '../../shared/types'
 import {
   ASPECT_DIMS,
@@ -18,6 +18,8 @@ import {
   centeredSrc,
   mediaUrl,
   newRegion,
+  newClip,
+  projectFps,
   defaultCaptionStyle,
   CAPTION_PRESETS
 } from '../../shared/types'
@@ -30,6 +32,7 @@ import { LayersPanel } from './components/LayersPanel'
 import { OutputPreview } from './components/OutputPreview'
 import { useFit } from './lib/useFit'
 import { TrimBar } from './components/TrimBar'
+import { ClipStrip } from './components/ClipStrip'
 import { ToolRail, type ToolId } from './components/ToolRail'
 import { ToolPanel } from './components/ToolPanel'
 import { PlayIcon, PauseIcon, ExportIcon } from './components/Icons'
@@ -61,23 +64,18 @@ function cropGuide(
 function App(): JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [tools, setTools] = useState<ToolStatus | null>(null)
-  const [meta, setMeta] = useState<VideoMeta | null>(null)
-  const [srcUrl, setSrcUrl] = useState<string>('')
+  /** The project: an ordered list of clips, edited one at a time. */
+  const [clips, setClips] = useState<Clip[]>([])
+  const [activeId, setActiveId] = useState<string | null>(null)
+  /** Filmstrip per clip, keyed by clip id — building one is not free. */
+  const [strips, setStrips] = useState<Record<string, string>>({})
   const [current, setCurrent] = useState(0)
-  const [inSec, setInSec] = useState(0)
-  const [outSec, setOutSec] = useState(0)
   const [playing, setPlaying] = useState(false)
   const [aspect, setAspect] = useState<AspectPreset>('vertical')
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const [videoBox, setVideoBox] = useState<{ w: number; h: number } | null>(null)
-  const [stripUrl, setStripUrl] = useState('')
   const [tool, setTool] = useState<ToolId>('trim')
-  const [regions, setRegions] = useState<Region[]>([])
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null)
-  const [activePreset, setActivePreset] = useState<string | null>(null)
-  /** Set once the user arranges boxes themselves, which freezes the preset. */
-  const [presetDirty, setPresetDirty] = useState(false)
-  const [words, setWords] = useState<CaptionWord[]>([])
   const [capStyle, setCapStyle] = useState<CaptionStyle>(() => defaultCaptionStyle())
   const [modelId, setModelId] = useState<WhisperModelId>('base.en')
   const [modelReady, setModelReady] = useState(false)
@@ -87,6 +85,49 @@ function App(): JSX.Element {
   const pictureRef = useRef<HTMLDivElement>(null)
   const outPaneRef = useRef<HTMLDivElement>(null)
   const outFrameRef = useRef<HTMLDivElement>(null)
+
+  /**
+   * The clip being edited. Everything below reads and writes through it, so the
+   * rest of the editor stays written against "the current clip" rather than
+   * having to know about the project.
+   */
+  const active = clips.find((c) => c.id === activeId) ?? null
+
+  /** Setter shim supporting both a value and an updater, like useState. */
+  function makeSetter<K extends keyof Clip>(key: K) {
+    return (value: Clip[K] | ((prev: Clip[K]) => Clip[K])): void => {
+      setClips((cs) =>
+        cs.map((c) =>
+          c.id === activeId
+            ? {
+                ...c,
+                [key]:
+                  typeof value === 'function'
+                    ? (value as (prev: Clip[K]) => Clip[K])(c[key])
+                    : value
+              }
+            : c
+        )
+      )
+    }
+  }
+
+  const meta = active?.meta ?? null
+  const srcUrl = meta ? mediaUrl(meta.path) : ''
+  const stripUrl = activeId ? (strips[activeId] ?? '') : ''
+  const inSec = active?.inSec ?? 0
+  const outSec = active?.outSec ?? 0
+  const regions = active?.regions ?? []
+  const words = active?.words ?? []
+  const activePreset = active?.activePreset ?? null
+  const presetDirty = active?.presetDirty ?? false
+
+  const setInSec = makeSetter('inSec')
+  const setOutSec = makeSetter('outSec')
+  const setRegions = makeSetter('regions')
+  const setWords = makeSetter('words')
+  const setActivePreset = makeSetter('activePreset')
+  const setPresetDirty = makeSetter('presetDirty')
 
   /** null on 'source', which means "no compositing, just trim". */
   const canvasDims = aspect === 'source' ? null : ASPECT_DIMS[aspect]
@@ -132,36 +173,35 @@ function App(): JSX.Element {
     })
   }, [])
 
+  /** Appends a file to the project and selects it. */
   const loadPath = useCallback(async (filePath: string) => {
     try {
       const m = await window.api.probe(filePath)
-      setMeta(m)
-      setSrcUrl(mediaUrl(filePath))
-      setInSec(0)
-      setOutSec(m.durationSec)
-      setCurrent(0)
-      setStatus({ kind: 'idle' })
-      setStripUrl('')
+      const clip = newClip(m)
       // Start on the single centred box — same result as a plain reframe, but
       // now it is an editable layout rather than a fixed crop.
-      const initial = LAYOUT_PRESETS[0].build({
+      clip.regions = LAYOUT_PRESETS[0].build({
         srcAspect: m.height ? m.width / m.height : 16 / 9,
         canvasW: 1080,
         canvasH: 1920
       })
-      setRegions(initial)
-      setSelectedRegion(initial[0]?.id ?? null)
-      setActivePreset(LAYOUT_PRESETS[0].id)
-      setPresetDirty(false)
+      clip.activePreset = LAYOUT_PRESETS[0].id
+
+      setClips((cs) => [...cs, clip])
+      setActiveId(clip.id)
+      setSelectedRegion(clip.regions[0]?.id ?? null)
+      setCurrent(0)
+      setStatus({ kind: 'idle' })
       setRevision((n) => n + 1)
+
       // Thumbnails are a nicety. Isolated in its own try because a missing
       // bridge method throws synchronously and would otherwise surface as an
       // "this video failed to load" error.
       try {
         const strip = await window.api.filmstrip(filePath, m.durationSec)
-        setStripUrl(mediaUrl(strip))
+        setStrips((s) => ({ ...s, [clip.id]: mediaUrl(strip) }))
       } catch {
-        setStripUrl('')
+        /* the timeline just stays plain */
       }
     } catch (err) {
       setStatus({ kind: 'error', message: err instanceof Error ? err.message : String(err) })
@@ -172,6 +212,33 @@ function App(): JSX.Element {
     const filePath = await window.api.openVideo()
     if (filePath) await loadPath(filePath)
   }, [loadPath])
+
+  const removeClip = useCallback(
+    (id: string) => {
+      setClips((cs) => {
+        const next = cs.filter((c) => c.id !== id)
+        if (id === activeId) setActiveId(next[0]?.id ?? null)
+        return next
+      })
+      setStrips((s) => {
+        const next = { ...s }
+        delete next[id]
+        return next
+      })
+    },
+    [activeId]
+  )
+
+  const moveClip = useCallback((id: string, dir: -1 | 1) => {
+    setClips((cs) => {
+      const i = cs.findIndex((c) => c.id === id)
+      const j = i + dir
+      if (i < 0 || j < 0 || j >= cs.length) return cs
+      const next = [...cs]
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return next
+    })
+  }, [])
 
   const onDrop = useCallback(
     (e: React.DragEvent) => {
@@ -223,36 +290,62 @@ function App(): JSX.Element {
 
     setStatus({ kind: 'exporting', percent: 0, speed: '' })
 
-    // A canvas plus boxes means compositing; 'source' is a plain trim, which can
-    // stream-copy and stays much faster.
-    const captions = words.length > 0 ? { words, style: capStyle } : undefined
+    const trackFor = (c: Clip) =>
+      c.words.length > 0 ? { words: c.words, style: capStyle } : undefined
 
-    const result =
-      canvasDims && regions.length > 0
-        ? await window.api.exportComposite({
-            inputPath: meta.path,
-            outputPath,
-            startSec: inSec,
-            endSec: outSec,
-            regions,
-            srcWidth: meta.width,
-            srcHeight: meta.height,
-            canvas: canvasDims,
-            captions
-          })
-        : await window.api.exportClip({
-            inputPath: meta.path,
-            outputPath,
-            startSec: inSec,
-            endSec: outSec,
-            aspect,
-            reencode: false,
-            captions
-          })
+    let result
+    if (clips.length > 1) {
+      // Several clips: render each on the shared canvas, then join them.
+      if (!canvasDims) {
+        setStatus({
+          kind: 'error',
+          message: 'Joining clips needs a fixed canvas — pick 9:16, 1:1 or 16:9 rather than Source.'
+        })
+        return
+      }
+      result = await window.api.exportProject({
+        outputPath,
+        canvas: canvasDims,
+        fps: projectFps(clips),
+        segments: clips.map((c) => ({
+          inputPath: c.meta.path,
+          startSec: c.inSec,
+          endSec: c.outSec,
+          regions: c.regions,
+          srcWidth: c.meta.width,
+          srcHeight: c.meta.height,
+          hasAudio: c.meta.hasAudio,
+          captions: trackFor(c)
+        }))
+      })
+    } else if (canvasDims && regions.length > 0) {
+      result = await window.api.exportComposite({
+        inputPath: meta.path,
+        outputPath,
+        startSec: inSec,
+        endSec: outSec,
+        regions,
+        srcWidth: meta.width,
+        srcHeight: meta.height,
+        canvas: canvasDims,
+        captions: trackFor(active!)
+      })
+    } else {
+      // A plain trim can stream-copy, which stays far faster.
+      result = await window.api.exportClip({
+        inputPath: meta.path,
+        outputPath,
+        startSec: inSec,
+        endSec: outSec,
+        aspect,
+        reencode: false,
+        captions: trackFor(active!)
+      })
+    }
 
     if (result.ok && result.outputPath) setStatus({ kind: 'done', path: result.outputPath })
     else setStatus({ kind: 'error', message: result.error ?? 'Export failed' })
-  }, [meta, inSec, outSec, aspect, canvasDims, regions, words, capStyle])
+  }, [meta, active, clips, inSec, outSec, aspect, canvasDims, regions, capStyle])
 
   // Space toggles play, I/O set the trim points — the shortcuts editors expect.
   useEffect(() => {
@@ -719,6 +812,20 @@ function App(): JSX.Element {
               <span className="meta-chip">{meta.fps} fps</span>
               <span className="meta-chip">{formatBytes(meta.sizeBytes)}</span>
             </div>
+
+            <ClipStrip
+              clips={clips}
+              activeId={activeId}
+              strips={strips}
+              onSelect={(id) => {
+                setActiveId(id)
+                setCurrent(0)
+                setSelectedRegion(null)
+              }}
+              onMove={moveClip}
+              onRemove={removeClip}
+              onAdd={openFile}
+            />
 
             <TrimBar
               duration={meta.durationSec}

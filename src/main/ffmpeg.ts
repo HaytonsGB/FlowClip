@@ -5,7 +5,7 @@
  * Shipping our own means a user never has to install ffmpeg themselves.
  */
 import { spawn, execFile } from 'child_process'
-import { existsSync, mkdirSync, statSync } from 'fs'
+import { existsSync, mkdirSync, statSync, writeFileSync, rmSync, copyFileSync } from 'fs'
 import { createHash } from 'crypto'
 import { join } from 'path'
 import { app } from 'electron'
@@ -15,6 +15,7 @@ import type {
   ExportProgress,
   ToolStatus,
   CompositeExportRequest,
+  ProjectExportRequest,
   Rect
 } from '../shared/types'
 import { ASPECT_DIMS } from '../shared/types'
@@ -352,23 +353,42 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
   // -loop keeps each still mask supplying frames for the whole clip.
   const maskArgs = maskInputs.flatMap((p) => ['-loop', '1', '-i', p])
 
+  // Joining segments by stream copy only works if they agree on frame rate and
+  // audio layout, and a silent source would otherwise produce a segment with no
+  // audio stream at all to join against.
+  const forJoin = req.fps !== undefined
+  const needSilence = forJoin && req.hasAudio === false
+  const silenceArgs = needSilence
+    ? ['-f', 'lavfi', '-t', duration.toFixed(3), '-i', 'anullsrc=r=48000:cl=stereo']
+    : []
+  const audioMap = needSilence
+    ? ['-map', `${maskInputs.length + 1}:a`]
+    : ['-map', '0:a?']
+
+  if (forJoin) {
+    steps.push(`${finalLabel}fps=${req.fps}[out]`)
+    finalLabel = '[out]'
+  }
+
   return [
     '-hide_banner',
     '-y',
     '-ss', req.startSec.toFixed(3),
     '-i', req.inputPath,
     ...maskArgs,
+    ...silenceArgs,
     '-t', duration.toFixed(3),
     '-filter_complex', steps.join(';'),
     '-map', finalLabel,
-    // '?' keeps the export working when the source has no audio track.
-    '-map', '0:a?',
+    ...audioMap,
     '-c:v', 'libx264',
     '-preset', 'veryfast',
     '-crf', '20',
     '-pix_fmt', 'yuv420p',
+    ...(forJoin ? ['-r', String(req.fps), '-video_track_timescale', '90000'] : []),
     '-c:a', 'aac',
     '-b:a', '192k',
+    ...(forJoin ? ['-ar', '48000', '-ac', '2'] : []),
     '-movflags', '+faststart',
     req.outputPath
   ]
@@ -405,6 +425,93 @@ export async function runCompositeExport(
 ): Promise<void> {
   const args = await buildCompositeArgs(req)
   return runFfmpeg(args, Math.max(0.05, req.endSec - req.startSec), onProgress)
+}
+
+/**
+ * Renders each clip through the existing composite path, then joins them.
+ *
+ * Segments are rendered separately rather than built into one giant filter graph
+ * so every clip keeps its own layout and captions. Because they all land on the
+ * same canvas, frame rate and audio format, the join itself is a stream copy —
+ * no second encode, no generation loss.
+ */
+export async function runProjectExport(
+  req: ProjectExportRequest,
+  onProgress: (p: ExportProgress) => void
+): Promise<void> {
+  const { ffmpegPath } = toolStatus()
+  if (!ffmpegPath) throw new Error('ffmpeg not found')
+  if (req.segments.length === 0) throw new Error('Add at least one clip')
+
+  const work = join(app.getPath('temp'), 'flowclip-segments')
+  mkdirSync(work, { recursive: true })
+
+  const totals = req.segments.map((s) => Math.max(0.05, s.endSec - s.startSec))
+  const grandTotal = totals.reduce((a, b) => a + b, 0)
+  const parts: string[] = []
+  let done = 0
+
+  try {
+    for (const [i, seg] of req.segments.entries()) {
+      const out = join(work, `seg_${Date.now().toString(36)}_${i}.mp4`)
+      const args = await buildCompositeArgs({
+        inputPath: seg.inputPath,
+        outputPath: out,
+        startSec: seg.startSec,
+        endSec: seg.endSec,
+        regions: seg.regions,
+        srcWidth: seg.srcWidth,
+        srcHeight: seg.srcHeight,
+        canvas: req.canvas,
+        captions: seg.captions,
+        fps: req.fps,
+        hasAudio: seg.hasAudio
+      })
+
+      const base = done
+      await runFfmpeg(args, totals[i], (p) => {
+        onProgress({
+          percent: grandTotal > 0 ? (base + p.timeSec) / grandTotal : 0,
+          timeSec: base + p.timeSec,
+          speed: p.speed
+        })
+      })
+      done += totals[i]
+      parts.push(out)
+    }
+
+    if (parts.length === 1) {
+      copyFileSync(parts[0], req.outputPath)
+      return
+    }
+
+    // The demuxer wants forward slashes and quoted paths, one per line.
+    const listPath = join(work, `list_${Date.now().toString(36)}.txt`)
+    writeFileSync(
+      listPath,
+      parts.map((p) => `file '${p.replace(/\\/g, '/')}'`).join('\n'),
+      'utf8'
+    )
+
+    await runFfmpeg(
+      [
+        '-hide_banner', '-y',
+        '-f', 'concat',
+        '-safe', '0',
+        '-i', listPath,
+        '-c', 'copy',
+        '-movflags', '+faststart',
+        req.outputPath
+      ],
+      grandTotal,
+      () => {
+        /* the join is a copy and effectively instant */
+      }
+    )
+    rmSync(listPath, { force: true })
+  } finally {
+    for (const p of parts) rmSync(p, { force: true })
+  }
 }
 
 function runFfmpeg(

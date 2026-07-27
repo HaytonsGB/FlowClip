@@ -6,6 +6,7 @@ import {
   probe,
   runExport,
   runCompositeExport,
+  runProjectExport,
   toolStatus,
   rescanTools,
   filmstrip
@@ -16,6 +17,7 @@ import type {
   ExportRequest,
   ExportResult,
   CompositeExportRequest,
+  ProjectExportRequest,
   WhisperModelId
 } from '../shared/types'
 
@@ -157,6 +159,20 @@ function registerIpc(): void {
     async (event, req: CompositeExportRequest): Promise<ExportResult> => {
       try {
         await runCompositeExport(req, (p) => {
+          if (!event.sender.isDestroyed()) event.sender.send('clip:progress', p)
+        })
+        return { ok: true, outputPath: req.outputPath }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
+
+  ipcMain.handle(
+    'clip:exportProject',
+    async (event, req: ProjectExportRequest): Promise<ExportResult> => {
+      try {
+        await runProjectExport(req, (p) => {
           if (!event.sender.isDestroyed()) event.sender.send('clip:progress', p)
         })
         return { ok: true, outputPath: req.outputPath }

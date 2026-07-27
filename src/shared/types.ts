@@ -371,10 +371,77 @@ export interface ModelProgress {
   percent: number
 }
 
+/**
+ * One clip in the project: a source file plus everything done to it.
+ *
+ * Trim, layout and captions live per clip rather than per project, because two
+ * pieces of footage rarely want the same crop — a facecam sits in a different
+ * corner in every recording.
+ */
+export interface Clip {
+  id: string
+  meta: VideoMeta
+  inSec: number
+  outSec: number
+  regions: Region[]
+  words: CaptionWord[]
+  /** Preset the layout came from, and whether it has since been edited. */
+  activePreset: string | null
+  presetDirty: boolean
+}
+
+let clipSeq = 0
+
+export function newClip(meta: VideoMeta): Clip {
+  return {
+    id: `c${Date.now().toString(36)}${(clipSeq++).toString(36)}`,
+    meta,
+    inSec: 0,
+    outSec: meta.durationSec,
+    regions: [],
+    words: [],
+    activePreset: null,
+    presetDirty: false
+  }
+}
+
+/** Total runtime of the project — the sum of the trimmed clips. */
+export function projectDuration(clips: Clip[]): number {
+  return clips.reduce((n, c) => n + Math.max(0, c.outSec - c.inSec), 0)
+}
+
 /** Burned-in caption track. Absent means no captions on this export. */
 export interface CaptionTrack {
   words: CaptionWord[]
   style: CaptionStyle
+}
+
+/** One segment of a multi-clip export: a clip plus how to render it. */
+export interface ProjectSegment {
+  inputPath: string
+  startSec: number
+  endSec: number
+  regions: Region[]
+  srcWidth: number
+  srcHeight: number
+  /** Silent sources need generated silence, or they cannot be joined. */
+  hasAudio: boolean
+  captions?: CaptionTrack
+}
+
+export interface ProjectExportRequest {
+  outputPath: string
+  segments: ProjectSegment[]
+  canvas: { w: number; h: number }
+  /** Every segment is rendered at this rate so the join can be a stream copy. */
+  fps: number
+}
+
+/** Project frame rate: the fastest source, capped so 120fps captures stay sane. */
+export function projectFps(clips: { meta: VideoMeta }[]): number {
+  const best = clips.reduce((n, c) => Math.max(n, c.meta.fps || 0), 0)
+  if (!best) return 30
+  return Math.min(60, Math.round(best))
 }
 
 export interface CompositeExportRequest {
@@ -388,6 +455,13 @@ export interface CompositeExportRequest {
   srcWidth: number
   srcHeight: number
   canvas: { w: number; h: number }
+  /**
+   * Forces the output frame rate. Set when the clip is one segment of a
+   * multi-clip export, where every segment must match to be concatenated.
+   */
+  fps?: number
+  /** Whether the source carries audio; only consulted when `fps` is set. */
+  hasAudio?: boolean
 }
 
 export interface ExportRequest {

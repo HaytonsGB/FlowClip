@@ -7,6 +7,7 @@ import type {
   ExportProgress,
   ToolStatus,
   CompositeExportRequest,
+  ProjectExportRequest,
   WhisperModelId,
   CaptionWord,
   ModelProgress
@@ -27,6 +28,8 @@ const api = {
   exportClip: (req: ExportRequest): Promise<ExportResult> => ipcRenderer.invoke('clip:export', req),
   exportComposite: (req: CompositeExportRequest): Promise<ExportResult> =>
     ipcRenderer.invoke('clip:exportComposite', req),
+  exportProject: (req: ProjectExportRequest): Promise<ExportResult> =>
+    ipcRenderer.invoke('clip:exportProject', req),
   revealFile: (filePath: string): Promise<void> => ipcRenderer.invoke('shell:revealFile', filePath),
 
   /** Electron 33 removed File.path; this is the supported replacement. */
