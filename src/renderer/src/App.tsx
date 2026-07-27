@@ -299,6 +299,15 @@ function App(): JSX.Element {
           <div className="workspace">
           <section className={`stage ${tool === 'layout' ? 'split' : ''}`}>
           <div className="pane">
+            {tool === 'layout' && (
+              <div className="pane-head">
+                <span className="pane-title">Source</span>
+                <span className="pane-sub">
+                  {meta.width}×{meta.height} — drag a box to pick what it grabs
+                </span>
+              </div>
+            )}
+            <div className="pane-body">
             <video
               ref={videoRef}
               src={srcUrl}
@@ -349,11 +358,18 @@ function App(): JSX.Element {
                 ))}
               </div>
             )}
-            {tool === 'layout' && <span className="pane-tag">Source</span>}
+            </div>
           </div>
 
           {tool === 'layout' && (
-            <div className="pane output" ref={outPaneRef}>
+            <div className="pane output">
+              <div className="pane-head">
+                <span className="pane-title out">Output</span>
+                <span className="pane-sub">
+                  {canvasDims ? `${canvasDims.w}×${canvasDims.h} — drag to place` : 'no canvas'}
+                </span>
+              </div>
+              <div className="pane-body" ref={outPaneRef}>
               {canvasDims && outBox ? (
                 <div
                   className="overlay-frame"
@@ -384,9 +400,7 @@ function App(): JSX.Element {
                   Pick a canvas other than <b>Source</b> to compose a layout.
                 </p>
               )}
-              <span className="pane-tag">
-                Output {canvasDims ? `${canvasDims.w}×${canvasDims.h}` : ''}
-              </span>
+              </div>
             </div>
           )}
           </section>

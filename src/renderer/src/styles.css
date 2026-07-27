@@ -367,24 +367,53 @@ body {
   min-width: 0;
   height: 100%;
   display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* The media area. Kept separate from the header so overlays measure against
+   the picture and never sit under a label. */
+.pane-body {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
   align-items: center;
   justify-content: center;
 }
 
 .stage.split .pane.output {
-  flex: 0 0 34%;
+  flex: 0 0 30%;
 }
 
-.pane-tag {
-  position: absolute;
-  bottom: -4px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 10.5px;
-  font-weight: 640;
-  letter-spacing: 0.6px;
+.pane-head {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 0 2px 7px;
+  flex-shrink: 0;
+}
+
+.pane-title {
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 1.1px;
   text-transform: uppercase;
+  color: var(--cyan);
+  text-shadow: 0 0 14px rgba(34, 224, 240, 0.45);
+}
+
+.pane-title.out {
+  color: var(--magenta);
+  text-shadow: 0 0 14px rgba(244, 114, 230, 0.45);
+}
+
+.pane-sub {
+  font-size: 10.5px;
   color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pane-empty {
@@ -437,26 +466,53 @@ body {
   box-shadow: 0 0 20px rgba(244, 114, 230, 0.55), inset 0 0 24px rgba(244, 114, 230, 0.12);
 }
 
+/* Inside the box, not overhanging it — stacked boxes were colliding labels. */
 .region-label {
   position: absolute;
-  top: -9px;
-  left: 6px;
-  font-size: 9.5px;
+  top: 3px;
+  left: 3px;
+  font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
-  padding: 1px 7px;
-  border-radius: 20px;
-  background: rgba(7, 9, 18, 0.92);
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: rgba(7, 9, 18, 0.78);
   color: var(--cyan);
-  border: 1px solid rgba(34, 224, 240, 0.5);
   white-space: nowrap;
   pointer-events: none;
+  opacity: 0.75;
+  transition: opacity 0.14s;
+}
+
+.region.selected .region-label {
+  opacity: 1;
+  background: rgba(7, 9, 18, 0.92);
 }
 
 .region.dst .region-label {
   color: var(--magenta);
-  border-color: rgba(244, 114, 230, 0.5);
+}
+
+/* Unselected boxes recede so the composed frame stays readable. */
+.region:not(.selected) {
+  border-color: rgba(34, 224, 240, 0.4);
+  background: transparent;
+}
+
+.region.dst:not(.selected) {
+  border-color: rgba(244, 114, 230, 0.4);
+  background: transparent;
+}
+
+.region:not(.selected) .region-handle {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.region:hover .region-handle {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .region-handle {
@@ -500,6 +556,7 @@ body {
   display: flex;
   align-items: center;
   gap: 12px;
+  flex-wrap: wrap;
 }
 
 .panel-label {
@@ -510,6 +567,12 @@ body {
   color: var(--dim);
   width: 56px;
   flex-shrink: 0;
+}
+
+/* Sits mid-row rather than at the start, so it needs no fixed gutter. */
+.panel-label.preset {
+  width: auto;
+  margin-left: 8px;
 }
 
 .region-list {

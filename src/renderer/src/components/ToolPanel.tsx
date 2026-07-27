@@ -101,10 +101,7 @@ export function ToolPanel({
               </button>
             ))}
           </div>
-        </div>
-
-        <div className="layout-row">
-          <span className="panel-label">Preset</span>
+          <span className="panel-label preset">Preset</span>
           <div className="aspect-picker">
             {LAYOUT_PRESETS.map((p) => (
               <button
@@ -149,9 +146,8 @@ export function ToolPanel({
         </div>
 
         <p className="panel-hint">
-          Left is your source — drag a box to choose what it grabs. Right is the finished clip —
-          drag the matching box to place it. Stack a facecam, the gameplay and the minimap instead
-          of cropping them away.
+          Pick a box to select it, then drag it on the <b>Source</b> to choose what it grabs, or on
+          the <b>Output</b> to place it.
         </p>
       </div>
     )
