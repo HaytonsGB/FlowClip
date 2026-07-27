@@ -82,6 +82,24 @@ export function ArrowDownIcon(p: IconProps): JSX.Element {
   )
 }
 
+export function ArrowLeftIcon(p: IconProps): JSX.Element {
+  return (
+    <Svg {...p}>
+      <line x1="19" y1="12" x2="5" y2="12" />
+      <path d="M11 6l-6 6 6 6" />
+    </Svg>
+  )
+}
+
+export function ArrowRightIcon(p: IconProps): JSX.Element {
+  return (
+    <Svg {...p}>
+      <line x1="5" y1="12" x2="19" y2="12" />
+      <path d="M13 6l6 6-6 6" />
+    </Svg>
+  )
+}
+
 export function TrashIcon(p: IconProps): JSX.Element {
   return (
     <Svg {...p}>

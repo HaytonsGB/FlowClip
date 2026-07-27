@@ -27,12 +27,18 @@ import { CaptionsPanel, type CaptionJob } from './components/CaptionsPanel'
 import { TranscriptPanel } from './components/TranscriptPanel'
 import { CaptionHandle } from './components/CaptionHandle'
 import { retimeLine, replaceLine, insertCaption } from '../../shared/captions'
+import {
+  layoutClips,
+  totalDuration,
+  resolveTime,
+  projectTimeOf,
+  spanOf
+} from '../../shared/timeline'
+import { ProjectTimeline } from './components/ProjectTimeline'
 import { RegionRect } from './components/RegionRect'
 import { LayersPanel } from './components/LayersPanel'
 import { OutputPreview } from './components/OutputPreview'
 import { useFit } from './lib/useFit'
-import { TrimBar } from './components/TrimBar'
-import { ClipStrip } from './components/ClipStrip'
 import { ToolRail, type ToolId } from './components/ToolRail'
 import { ToolPanel } from './components/ToolPanel'
 import { PlayIcon, PauseIcon, ExportIcon } from './components/Icons'
@@ -69,7 +75,12 @@ function App(): JSX.Element {
   const [activeId, setActiveId] = useState<string | null>(null)
   /** Filmstrip per clip, keyed by clip id — building one is not free. */
   const [strips, setStrips] = useState<Record<string, string>>({})
-  const [current, setCurrent] = useState(0)
+  /** Playhead in project time, spanning every clip. */
+  const [projectSec, setProjectSec] = useState(0)
+  /** Source time to apply once a newly selected clip has loaded. */
+  const pendingSeek = useRef<number | null>(null)
+  /** Whether playback should resume after that load. */
+  const wantPlay = useRef(false)
   const [playing, setPlaying] = useState(false)
   const [aspect, setAspect] = useState<AspectPreset>('vertical')
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
@@ -112,9 +123,15 @@ function App(): JSX.Element {
     }
   }
 
+  const spans = useMemo(() => layoutClips(clips), [clips])
+  const total = totalDuration(spans)
+  /** Clip-local playhead, still what the tools and caption preview expect. */
+  const current = active
+    ? (resolveTime(spans, projectSec)?.sourceSec ?? active.inSec)
+    : 0
+
   const meta = active?.meta ?? null
   const srcUrl = meta ? mediaUrl(meta.path) : ''
-  const stripUrl = activeId ? (strips[activeId] ?? '') : ''
   const inSec = active?.inSec ?? 0
   const outSec = active?.outSec ?? 0
   const regions = active?.regions ?? []
@@ -190,7 +207,7 @@ function App(): JSX.Element {
       setClips((cs) => [...cs, clip])
       setActiveId(clip.id)
       setSelectedRegion(clip.regions[0]?.id ?? null)
-      setCurrent(0)
+      setProjectSec(0)
       setStatus({ kind: 'idle' })
       setRevision((n) => n + 1)
 
@@ -251,36 +268,87 @@ function App(): JSX.Element {
     [loadPath]
   )
 
+  /**
+   * Seeks in project time, switching the loaded clip when the target lands in a
+   * different one. The switch is asynchronous — the element has to load the new
+   * source first — so the wanted source time is stashed and applied on load.
+   */
+  const seekProject = useCallback(
+    (sec: number) => {
+      const resolved = resolveTime(spans, sec)
+      if (!resolved) return
+      setProjectSec(clamp(sec, 0, Math.max(0, total - 0.001)))
+
+      const v = videoRef.current
+      if (resolved.span.clip.id !== activeId) {
+        pendingSeek.current = resolved.sourceSec
+        setActiveId(resolved.span.clip.id)
+        setSelectedRegion(null)
+      } else if (v) {
+        v.currentTime = resolved.sourceSec
+      }
+    },
+    [spans, total, activeId]
+  )
+
+  /** Seeks using a time in the active clip's own source, which is what the
+      tools and the transcript work in. */
+  const seek = useCallback(
+    (sourceSec: number) => {
+      const span = active ? spanOf(spans, active.id) : null
+      if (span) seekProject(projectTimeOf(span, sourceSec))
+    },
+    [active, spans, seekProject]
+  )
+
   const togglePlay = useCallback(() => {
     const v = videoRef.current
     if (!v) return
     if (v.paused) {
-      // Restart inside the selection if the playhead drifted outside it.
-      if (v.currentTime < inSec || v.currentTime >= outSec) v.currentTime = inSec
+      // Restart from the top if the playhead is sitting at the very end.
+      if (projectSec >= total - 0.05) seekProject(0)
       void v.play()
     } else {
       v.pause()
     }
-  }, [inSec, outSec])
+  }, [projectSec, total, seekProject])
 
-  const seek = useCallback((sec: number) => {
-    const v = videoRef.current
-    if (v) v.currentTime = sec
-    setCurrent(sec)
-  }, [])
-
-  // Loop playback within the trimmed selection so you preview the actual clip.
-  const onTimeUpdate = useCallback(() => {
+  /** Applies a seek that was waiting on the new source to finish loading. */
+  const onLoadedMetadata = useCallback(() => {
     const v = videoRef.current
     if (!v) return
-    if (v.currentTime >= outSec) {
-      v.pause()
-      v.currentTime = inSec
-      setCurrent(inSec)
-    } else {
-      setCurrent(v.currentTime)
+    if (pendingSeek.current !== null) {
+      v.currentTime = pendingSeek.current
+      pendingSeek.current = null
+      if (wantPlay.current) void v.play()
     }
-  }, [inSec, outSec])
+  }, [])
+
+  const onTimeUpdate = useCallback(() => {
+    const v = videoRef.current
+    if (!v || !active) return
+
+    // Rolled past this clip's out point: move to the next one, or stop at the end.
+    if (v.currentTime >= active.outSec - 0.02) {
+      const span = spanOf(spans, active.id)
+      const next = span ? spans[span.index + 1] : null
+      if (next) {
+        wantPlay.current = !v.paused
+        pendingSeek.current = next.clip.inSec
+        setProjectSec(next.start)
+        setActiveId(next.clip.id)
+        setSelectedRegion(null)
+      } else {
+        v.pause()
+        wantPlay.current = false
+        setProjectSec(total)
+      }
+      return
+    }
+
+    const span = spanOf(spans, active.id)
+    if (span) setProjectSec(projectTimeOf(span, v.currentTime))
+  }, [active, spans, total])
 
   const doExport = useCallback(async () => {
     if (!meta) return
@@ -658,6 +726,7 @@ function App(): JSX.Element {
               src={srcUrl}
               className="video"
               onTimeUpdate={onTimeUpdate}
+              onLoadedMetadata={onLoadedMetadata}
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
               onClick={togglePlay}
@@ -813,29 +882,29 @@ function App(): JSX.Element {
               <span className="meta-chip">{formatBytes(meta.sizeBytes)}</span>
             </div>
 
-            <ClipStrip
+            <ProjectTimeline
               clips={clips}
               activeId={activeId}
               strips={strips}
+              projectSec={projectSec}
+              onSeek={seekProject}
               onSelect={(id) => {
-                setActiveId(id)
-                setCurrent(0)
-                setSelectedRegion(null)
+                if (id !== activeId) {
+                  const span = spanOf(spans, id)
+                  if (span) {
+                    pendingSeek.current = span.clip.inSec
+                    setProjectSec(span.start)
+                  }
+                  setActiveId(id)
+                  setSelectedRegion(null)
+                }
               }}
+              onTrim={(id, patch) =>
+                setClips((cs) => cs.map((c) => (c.id === id ? { ...c, ...patch } : c)))
+              }
               onMove={moveClip}
               onRemove={removeClip}
               onAdd={openFile}
-            />
-
-            <TrimBar
-              duration={meta.durationSec}
-              current={current}
-              inSec={inSec}
-              outSec={outSec}
-              stripUrl={stripUrl}
-              onSeek={seek}
-              onChangeIn={setInSec}
-              onChangeOut={setOutSec}
             />
 
             <div className="row">

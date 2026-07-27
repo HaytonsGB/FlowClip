@@ -859,135 +859,108 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* ---------- clip strip ---------- */
-.clipstrip {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+/* ---------- project timeline ---------- */
+/* Clips are laid out absolutely across the track, sized by trimmed length. */
+.trimbar-track.project {
+  background-image: none;
 }
 
-.clipstrip-head {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.clipstrip-total {
-  font-size: 10.5px;
-  color: var(--dim);
-  font-variant-numeric: tabular-nums;
-}
-
-.clipstrip-row {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-}
-
-.clipcard {
-  position: relative;
-  flex: 0 0 152px;
-  height: 54px;
-  border: 1px solid var(--line);
-  border-radius: 9px;
-  background-color: rgba(20, 26, 46, 0.9);
-  background-size: cover;
-  background-position: center;
-  cursor: pointer;
-  overflow: hidden;
-  transition: border-color 0.15s, box-shadow 0.15s;
-}
-
-.clipcard:hover {
-  border-color: var(--line-bright);
-}
-
-.clipcard.active {
-  border-color: var(--cyan);
-  box-shadow: 0 0 18px rgba(34, 224, 240, 0.3);
-}
-
-/* Scrim so the filmstrip behind never swallows the label. */
-.clipcard-info {
+.tl-clip {
   position: absolute;
-  left: 0;
-  right: 0;
+  top: 0;
   bottom: 0;
-  padding: 4px 7px;
-  background: linear-gradient(180deg, transparent, rgba(5, 7, 16, 0.92));
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.clipcard-name {
-  font-size: 10.5px;
-  font-weight: 600;
-  color: var(--text);
-  white-space: nowrap;
+  background-color: rgba(30, 38, 62, 0.95);
+  background-repeat: no-repeat;
+  border-left: 1px solid rgba(5, 7, 16, 0.9);
+  border-right: 1px solid rgba(5, 7, 16, 0.9);
   overflow: hidden;
-  text-overflow: ellipsis;
+  cursor: pointer;
+  transition: box-shadow 0.15s;
 }
 
-.clipcard-dur {
-  font-size: 10px;
-  color: var(--cyan);
-  font-variant-numeric: tabular-nums;
-  margin-left: auto;
-  flex-shrink: 0;
-}
-
-.clipcard-index {
+.tl-clip::after {
+  content: '';
   position: absolute;
-  top: 4px;
-  left: 5px;
-  font-size: 9.5px;
-  font-weight: 750;
+  inset: 0;
+  background: rgba(5, 7, 16, 0.45);
+  transition: background 0.15s;
+}
+
+.tl-clip.active::after {
+  background: transparent;
+}
+
+.tl-clip.active {
+  box-shadow: inset 0 0 0 2px var(--cyan), 0 0 20px rgba(34, 224, 240, 0.25);
+  z-index: 1;
+}
+
+.tl-clip-name {
+  position: absolute;
+  left: 6px;
+  bottom: 4px;
+  z-index: 2;
+  font-size: 10px;
+  font-weight: 620;
   color: var(--text);
   background: rgba(5, 7, 16, 0.8);
   border-radius: 4px;
-  padding: 0 5px;
+  padding: 1px 6px;
+  max-width: calc(100% - 14px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
 }
 
-.clipcard-actions {
+.tl-clip-actions {
   position: absolute;
   top: 3px;
   right: 3px;
+  z-index: 3;
   display: flex;
   gap: 1px;
   opacity: 0;
   transition: opacity 0.14s;
 }
 
-.clipcard:hover .clipcard-actions {
+.tl-clip:hover .tl-clip-actions {
   opacity: 1;
 }
 
-.clipcard-actions .icon-btn {
-  background: rgba(5, 7, 16, 0.78);
+.tl-clip-actions .icon-btn {
+  background: rgba(5, 7, 16, 0.82);
   padding: 2px;
 }
 
-.clipcard.add {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 3px;
-  flex: 0 0 96px;
-  border-style: dashed;
-  border-color: rgba(157, 123, 255, 0.4);
-  color: var(--dim);
-  font-size: 10.5px;
-  font-family: inherit;
-  background-image: none;
+/* Trim grips, shown on the selected clip only. */
+.tl-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 9px;
+  z-index: 3;
+  cursor: ew-resize;
+  touch-action: none;
+  background: linear-gradient(180deg, var(--cyan), #12b6cc);
+  box-shadow: 0 0 12px rgba(34, 224, 240, 0.6);
 }
 
-.clipcard.add:hover {
-  color: var(--violet);
-  border-color: var(--violet);
-  background-color: rgba(157, 123, 255, 0.08);
+.tl-handle.in {
+  left: 0;
+  border-radius: 3px 0 0 3px;
+}
+
+.tl-handle.out {
+  right: 0;
+  background: linear-gradient(180deg, var(--magenta), #a63fd0);
+  box-shadow: 0 0 12px rgba(244, 114, 230, 0.6);
+  border-radius: 0 3px 3px 0;
+}
+
+.add-clip {
+  padding: 3px 10px;
+  font-size: 11px;
 }
 
 /* ---------- time ruler ---------- */
