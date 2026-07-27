@@ -1,0 +1,454 @@
+:root {
+  --bg: #0b0d12;
+  --panel: #141821;
+  --panel-2: #1b202b;
+  --line: #262d3a;
+  --text: #e8ecf4;
+  --dim: #8b95a8;
+  --accent: #4de0c4;
+  --accent-2: #7c8cff;
+  --danger: #ff6b6b;
+  --ok: #4de08a;
+  font-synthesis: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  font-size: 14px;
+  overflow: hidden;
+  user-select: none;
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* ---------- top bar ---------- */
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  -webkit-app-region: drag;
+}
+
+.topbar-actions,
+.btn {
+  -webkit-app-region: no-drag;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: 0.2px;
+}
+
+.brand-mark {
+  color: var(--accent);
+  font-size: 18px;
+  transform: rotate(-45deg);
+}
+
+.brand-accent {
+  color: var(--accent);
+}
+
+/* ---------- buttons ---------- */
+.btn {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 550;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn:hover:not(:disabled) {
+  background: #232a37;
+  border-color: #37415a;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn.primary {
+  background: linear-gradient(135deg, var(--accent), var(--accent-2));
+  color: #07131a;
+  border: none;
+  font-weight: 680;
+}
+
+.btn.primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.btn.round {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  padding: 0;
+  font-size: 13px;
+}
+
+.btn.export {
+  padding: 10px 22px;
+}
+
+.link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+  font: inherit;
+  padding: 0;
+}
+
+/* ---------- drop zone ---------- */
+.dropzone {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  padding: 32px;
+}
+
+.dropzone-inner {
+  text-align: center;
+  border: 2px dashed var(--line);
+  border-radius: 18px;
+  padding: 64px 72px;
+  max-width: 560px;
+}
+
+.dropzone-icon {
+  font-size: 44px;
+  color: var(--accent);
+  transform: rotate(-45deg);
+  margin-bottom: 20px;
+}
+
+.dropzone h1 {
+  margin: 0 0 10px;
+  font-size: 26px;
+  font-weight: 650;
+}
+
+.dropzone p {
+  margin: 0 0 26px;
+  color: var(--dim);
+  line-height: 1.5;
+}
+
+/* ---------- editor ---------- */
+.editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.stage {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  background: #05070a;
+  padding: 18px;
+  position: relative;
+}
+
+.video {
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 10px;
+  background: #000;
+  cursor: pointer;
+}
+
+/* Overlay showing the crop that the chosen preset will actually keep. */
+.frame-guide {
+  position: absolute;
+  pointer-events: none;
+  border: 2px solid rgba(77, 224, 196, 0.85);
+  border-radius: 6px;
+  box-shadow: 0 0 0 9999px rgba(5, 7, 10, 0.55);
+  top: 18px;
+  bottom: 18px;
+  aspect-ratio: var(--guide-ratio, 9 / 16);
+}
+
+.stage.aspect-vertical {
+  --guide-ratio: 9 / 16;
+}
+
+.stage.aspect-square {
+  --guide-ratio: 1 / 1;
+}
+
+.stage.aspect-wide {
+  --guide-ratio: 16 / 9;
+}
+
+/* ---------- controls ---------- */
+.controls {
+  background: var(--panel);
+  border-top: 1px solid var(--line);
+  padding: 14px 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+}
+
+.transport {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.time {
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.dim {
+  color: var(--dim);
+  font-weight: 400;
+}
+
+.spacer {
+  flex: 1;
+}
+
+.meta-chip {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+/* ---------- trim bar ---------- */
+.trimbar-track {
+  position: relative;
+  height: 46px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.trimbar-dim {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: rgba(5, 7, 10, 0.62);
+}
+
+.trimbar-selection {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(77, 224, 196, 0.16),
+    rgba(124, 140, 255, 0.16)
+  );
+  border-top: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent-2);
+}
+
+.trimbar-playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: #fff;
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.7);
+  pointer-events: none;
+}
+
+.trimbar-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  margin-left: -6px;
+  background: var(--accent);
+  border-radius: 3px;
+  cursor: ew-resize;
+  touch-action: none;
+}
+
+.trimbar-handle.out {
+  background: var(--accent-2);
+}
+
+.trimbar-handle::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-left: 1px solid rgba(0, 0, 0, 0.35);
+  border-right: 1px solid rgba(0, 0, 0, 0.35);
+  margin: 16px 4px;
+}
+
+.trimbar-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 7px;
+  font-size: 12px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.trimbar-length {
+  color: var(--accent);
+  font-weight: 620;
+}
+
+/* ---------- aspect picker ---------- */
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.aspect-picker {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.chip {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--dim);
+  border-radius: 20px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.chip:hover {
+  color: var(--text);
+  border-color: #37415a;
+}
+
+.chip.active {
+  background: rgba(77, 224, 196, 0.14);
+  border-color: var(--accent);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* ---------- progress & banners ---------- */
+.progress {
+  position: relative;
+  height: 24px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2));
+  transition: width 0.2s;
+}
+
+.progress-label {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+
+.banner {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.banner.warn {
+  background: rgba(255, 190, 92, 0.1);
+  border: 1px solid rgba(255, 190, 92, 0.4);
+  color: #ffcf87;
+  margin: 12px 18px 0;
+}
+
+.banner.ok {
+  background: rgba(77, 224, 138, 0.1);
+  border: 1px solid rgba(77, 224, 138, 0.35);
+  color: var(--ok);
+}
+
+.banner.err {
+  background: rgba(255, 107, 107, 0.1);
+  border: 1px solid rgba(255, 107, 107, 0.35);
+  color: var(--danger);
+  max-height: 110px;
+  overflow: auto;
+  user-select: text;
+  white-space: pre-wrap;
+}
+
+.banner code {
+  background: rgba(0, 0, 0, 0.35);
+  padding: 2px 6px;
+  border-radius: 4px;
+  user-select: text;
+}
+
+.hint {
+  margin: 0;
+  font-size: 12px;
+  color: var(--dim);
+  text-align: center;
+}
+
+kbd {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: inherit;
+  font-size: 11px;
+  color: var(--text);
+}

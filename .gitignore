@@ -1,0 +1,10 @@
+node_modules
+dist
+out
+*.log
+.DS_Store
+.vite
+release
+# FlowClip working files
+resources/bin/
+scratch/
