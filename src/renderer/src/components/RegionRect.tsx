@@ -15,9 +15,50 @@ interface Props {
   onSelect: () => void
   /** Locks the box to this width/height ratio while resizing. */
   lockAspect?: number
+  /** Guide lines (0..1) that edges and centres snap to. */
+  snapX?: number[]
+  snapY?: number[]
 }
 
 const MIN = 0.06
+/** Within ~1.2% of a guide, edges lock to it. */
+const SNAP_TOL = 0.012
+
+/** Nearest target within tolerance, else the value unchanged. */
+function snapTo(value: number, targets: number[] | undefined): number {
+  if (!targets?.length) return value
+  let best = value
+  let bestDelta = SNAP_TOL
+  for (const t of targets) {
+    const d = Math.abs(value - t)
+    if (d < bestDelta) {
+      bestDelta = d
+      best = t
+    }
+  }
+  return best
+}
+
+/**
+ * Snap a box's position by whichever of its two edges is closest to a guide,
+ * so dragging locks to edges and centre lines without fighting the pointer.
+ */
+function snapSpan(pos: number, size: number, targets: number[] | undefined): number {
+  if (!targets?.length) return pos
+  const leading = snapTo(pos, targets)
+  const trailing = snapTo(pos + size, targets) - size
+  const centre = snapTo(pos + size / 2, targets) - size / 2
+  let best = pos
+  let bestDelta = Number.POSITIVE_INFINITY
+  for (const c of [leading, trailing, centre]) {
+    const d = Math.abs(c - pos)
+    if (d > 0 && d < bestDelta) {
+      bestDelta = d
+      best = c
+    }
+  }
+  return bestDelta === Number.POSITIVE_INFINITY ? pos : best
+}
 
 /** Draggable, resizable rectangle in normalised (0..1) space. */
 export function RegionRect({
@@ -28,7 +69,9 @@ export function RegionRect({
   tone,
   selected,
   onSelect,
-  lockAspect
+  lockAspect,
+  snapX,
+  snapY
 }: Props): JSX.Element {
   const drag = useCallback(
     (mode: 'move' | Corner) =>
@@ -49,10 +92,12 @@ export function RegionRect({
           const dy = (ev.clientY - startY) / bounds.height
 
           if (mode === 'move') {
+            const rawX = clamp(start.x + dx, 0, 1 - start.w)
+            const rawY = clamp(start.y + dy, 0, 1 - start.h)
             onChange({
               ...start,
-              x: clamp(start.x + dx, 0, 1 - start.w),
-              y: clamp(start.y + dy, 0, 1 - start.h)
+              x: clamp(snapSpan(rawX, start.w, snapX), 0, 1 - start.w),
+              y: clamp(snapSpan(rawY, start.h, snapY), 0, 1 - start.h)
             })
             return
           }
@@ -62,23 +107,20 @@ export function RegionRect({
           const bottom = start.y + start.h
           let next: Rect
 
+          // Snap the edge being dragged, not the anchored one.
+          const edgeR = clamp(snapTo(start.x + start.w + dx, snapX), start.x + MIN, 1)
+          const edgeB = clamp(snapTo(start.y + start.h + dy, snapY), start.y + MIN, 1)
+          const edgeL = clamp(snapTo(start.x + dx, snapX), 0, right - MIN)
+          const edgeT = clamp(snapTo(start.y + dy, snapY), 0, bottom - MIN)
+
           if (mode === 'se') {
-            next = {
-              x: start.x,
-              y: start.y,
-              w: clamp(start.w + dx, MIN, 1 - start.x),
-              h: clamp(start.h + dy, MIN, 1 - start.y)
-            }
+            next = { x: start.x, y: start.y, w: edgeR - start.x, h: edgeB - start.y }
           } else if (mode === 'sw') {
-            const x = clamp(start.x + dx, 0, right - MIN)
-            next = { x, y: start.y, w: right - x, h: clamp(start.h + dy, MIN, 1 - start.y) }
+            next = { x: edgeL, y: start.y, w: right - edgeL, h: edgeB - start.y }
           } else if (mode === 'ne') {
-            const y = clamp(start.y + dy, 0, bottom - MIN)
-            next = { x: start.x, y, w: clamp(start.w + dx, MIN, 1 - start.x), h: bottom - y }
+            next = { x: start.x, y: edgeT, w: edgeR - start.x, h: bottom - edgeT }
           } else {
-            const x = clamp(start.x + dx, 0, right - MIN)
-            const y = clamp(start.y + dy, 0, bottom - MIN)
-            next = { x, y, w: right - x, h: bottom - y }
+            next = { x: edgeL, y: edgeT, w: right - edgeL, h: bottom - edgeT }
           }
 
           if (lockAspect && lockAspect > 0) {

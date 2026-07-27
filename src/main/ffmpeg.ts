@@ -222,15 +222,36 @@ export function buildCompositeArgs(req: CompositeExportRequest): string[] {
     const s = toPixels(region.src, srcWidth, srcHeight)
     const d = toPixels(region.dst, canvas.w, canvas.h)
     const crop = `crop=${s.w}:${s.h}:${s.x}:${s.y}`
+    const fill = `scale=${d.w}:${d.h}:force_original_aspect_ratio=increase,crop=${d.w}:${d.h}`
 
-    const shape =
-      region.fit === 'contain'
-        ? // Scale down to fit, then pad the slack so the slot stays its full size.
-          `scale=${d.w}:${d.h}:force_original_aspect_ratio=decrease,` +
-          `pad=${d.w}:${d.h}:(ow-iw)/2:(oh-ih)/2:color=black`
-        : `scale=${d.w}:${d.h}:force_original_aspect_ratio=increase,crop=${d.w}:${d.h}`
+    if (region.fit !== 'contain') {
+      steps.push(`[s${i}]${crop},${fill},setsar=1[r${i}]`)
+      return
+    }
 
-    steps.push(`[s${i}]${crop},${shape},setsar=1[r${i}]`)
+    const shrink = `scale=${d.w}:${d.h}:force_original_aspect_ratio=decrease`
+
+    if (region.backdrop === 'black') {
+      steps.push(
+        `[s${i}]${crop},${shrink},` +
+          `pad=${d.w}:${d.h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1[r${i}]`
+      )
+      return
+    }
+
+    // Blurred backdrop: one copy fills the slot and is blurred, the other keeps
+    // the whole frame and sits centred on top.
+    const bw = Math.max(16, evenClamp(d.w / 8, d.w))
+    const bh = Math.max(16, evenClamp(d.h / 8, d.h))
+    steps.push(`[s${i}]split=2[a${i}][b${i}]`)
+    steps.push(
+      // Blurring a downscaled copy then scaling back up is far cheaper than
+      // blurring at full size, and the result is indistinguishable once soft.
+      `[a${i}]${crop},scale=${bw}:${bh}:force_original_aspect_ratio=increase,crop=${bw}:${bh},` +
+        `gblur=sigma=6,scale=${d.w}:${d.h},eq=brightness=-0.07:saturation=1.1,setsar=1[bg${i}]`
+    )
+    steps.push(`[b${i}]${crop},${shrink},setsar=1[fg${i}]`)
+    steps.push(`[bg${i}][fg${i}]overlay=(W-w)/2:(H-h)/2[r${i}]`)
   })
 
   // Chain the overlays: bg + r0 -> o0, o0 + r1 -> o1, ...

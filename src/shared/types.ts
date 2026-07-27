@@ -45,12 +45,21 @@ export interface Rect {
  */
 export type FitMode = 'cover' | 'contain'
 
+/**
+ * What fills the slack around a `contain` layer. `blur` reuses the layer's own
+ * frame, scaled to cover and blurred behind it — the standard way to avoid dead
+ * black bars in a vertical clip.
+ */
+export type BackdropMode = 'blur' | 'black'
+
 export interface Region {
   id: string
   label: string
   src: Rect
   dst: Rect
   fit?: FitMode
+  /** Only meaningful when `fit` is 'contain'. Defaults to 'blur'. */
+  backdrop?: BackdropMode
   /**
    * Keep `src` locked to the centred crop that exactly fills `dst`. Set on
    * gameplay boxes so the main action never needs to be eyeballed, and cleared

@@ -60,9 +60,22 @@ export function OutputPreview({ videoRef, regions, canvas, revision }: Props): J
 
           try {
             if (region.fit === 'contain') {
-              // Whole source, scaled down and centred; the slack stays black.
               const sw = region.src.w * vw
               const sh = region.src.h * vh
+
+              if (region.backdrop !== 'black') {
+                // Same frame scaled to cover, blurred, sitting behind the fit.
+                const [bx, by, bw2, bh2] = coverCrop(region.src, vw, vh, dw / dh)
+                ctx.save()
+                ctx.beginPath()
+                ctx.rect(dx, dy, dw, dh)
+                ctx.clip()
+                ctx.filter = `blur(${Math.max(4, dw / 22)}px) brightness(0.9) saturate(1.1)`
+                ctx.drawImage(video, bx, by, bw2, bh2, dx, dy, dw, dh)
+                ctx.restore()
+              }
+
+              // Whole source, scaled down and centred on top.
               const scale = Math.min(dw / sw, dh / sh)
               const w = sw * scale
               const h = sh * scale

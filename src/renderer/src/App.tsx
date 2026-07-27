@@ -5,7 +5,8 @@ import type {
   ExportProgress,
   ToolStatus,
   Region,
-  FitMode
+  FitMode,
+  BackdropMode
 } from '../../shared/types'
 import {
   ASPECT_DIMS,
@@ -344,6 +345,12 @@ function App(): JSX.Element {
     []
   )
 
+  const setBackdrop = useCallback((id: string, backdrop: BackdropMode) => {
+    setRegions((rs) => rs.map((r) => (r.id === id ? { ...r, backdrop } : r)))
+    setPresetDirty(true)
+    setRevision((n) => n + 1)
+  }, [])
+
   /**
    * A layout that suits 9:16 is wrong on 16:9, so re-solve the preset whenever
    * the canvas changes. Skipped once the user has moved anything themselves —
@@ -366,6 +373,21 @@ function App(): JSX.Element {
     // re-run the moment an edit marks it dirty and undo that edit.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meta, canvasDims?.w, canvasDims?.h])
+
+  /**
+   * Snap guides for the output pane: the canvas edges and centre, plus every
+   * other layer's edges, so boxes butt up cleanly instead of nearly touching.
+   */
+  const snapGuides = useMemo(() => {
+    const xs = [0, 0.5, 1]
+    const ys = [0, 0.5, 1]
+    for (const r of regions) {
+      if (r.id === selectedRegion) continue
+      xs.push(r.dst.x, r.dst.x + r.dst.w)
+      ys.push(r.dst.y, r.dst.y + r.dst.h)
+    }
+    return { xs, ys }
+  }, [regions, selectedRegion])
 
   /** Where the picture actually sits inside the element after letterboxing. */
   const pictureBox = useMemo(() => {
@@ -513,6 +535,8 @@ function App(): JSX.Element {
                       tone="dst"
                       selected={selectedRegion === r.id}
                       onSelect={() => setSelectedRegion(r.id)}
+                      snapX={snapGuides.xs}
+                      snapY={snapGuides.ys}
                     />
                   ))}
                 </div>
@@ -534,6 +558,7 @@ function App(): JSX.Element {
               onRemove={removeRegion}
               onAdd={addRegion}
               onFit={setFit}
+              onBackdrop={setBackdrop}
             />
           )}
           </section>

@@ -682,6 +682,16 @@ body {
   color: var(--cyan);
 }
 
+.fit-toggle.backdrop {
+  margin-top: 4px;
+  border-style: dashed;
+}
+
+.fit-toggle.backdrop .fit-opt.on {
+  background: rgba(157, 123, 255, 0.18);
+  color: var(--violet);
+}
+
 .add-layer {
   justify-content: center;
   flex-shrink: 0;

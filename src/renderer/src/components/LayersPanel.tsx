@@ -1,4 +1,4 @@
-import type { Region, FitMode } from '../../../shared/types'
+import type { Region, FitMode, BackdropMode } from '../../../shared/types'
 import { PlusIcon, TrashIcon, ArrowUpIcon, ArrowDownIcon } from './Icons'
 
 interface Props {
@@ -9,6 +9,7 @@ interface Props {
   onRemove: (id: string) => void
   onAdd: () => void
   onFit: (id: string, fit: FitMode) => void
+  onBackdrop: (id: string, backdrop: BackdropMode) => void
 }
 
 /**
@@ -23,7 +24,8 @@ export function LayersPanel({
   onMove,
   onRemove,
   onAdd,
-  onFit
+  onFit,
+  onBackdrop
 }: Props): JSX.Element {
   const top = [...regions].reverse()
 
@@ -99,6 +101,26 @@ export function LayersPanel({
                   Fit
                 </button>
               </div>
+
+              {/* Only a fitted layer has slack to fill. */}
+              {r.fit === 'contain' && (
+                <div className="fit-toggle backdrop" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className={`fit-opt ${r.backdrop !== 'black' ? 'on' : ''}`}
+                    onClick={() => onBackdrop(r.id, 'blur')}
+                    title="Fill the slack with a blurred copy of this layer"
+                  >
+                    Blur bg
+                  </button>
+                  <button
+                    className={`fit-opt ${r.backdrop === 'black' ? 'on' : ''}`}
+                    onClick={() => onBackdrop(r.id, 'black')}
+                    title="Leave the slack black"
+                  >
+                    Black
+                  </button>
+                </div>
+              )}
             </div>
           )
         })}
