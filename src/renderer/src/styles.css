@@ -172,19 +172,24 @@ body {
   min-height: 0;
 }
 
+/* flex-basis 0 + min-height 0 keeps the stage from being grown by the video;
+   overflow hidden stops an oversized frame spilling over the controls. */
 .stage {
-  flex: 1;
+  position: relative;
+  flex: 1 1 0;
   min-height: 0;
   display: grid;
   place-items: center;
   background: #05070a;
   padding: 18px;
-  position: relative;
+  overflow: hidden;
 }
 
+/* Intrinsic video dimensions + max constraints = correct letterbox fit. */
 .video {
   max-width: 100%;
   max-height: 100%;
+  display: block;
   border-radius: 10px;
   background: #000;
   cursor: pointer;
@@ -193,29 +198,22 @@ body {
 /* Overlay showing the crop that the chosen preset will actually keep. */
 .frame-guide {
   position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
   pointer-events: none;
-  border: 2px solid rgba(77, 224, 196, 0.85);
+  border: 2px solid rgba(77, 224, 196, 0.9);
   border-radius: 6px;
-  box-shadow: 0 0 0 9999px rgba(5, 7, 10, 0.55);
-  top: 18px;
-  bottom: 18px;
-  aspect-ratio: var(--guide-ratio, 9 / 16);
-}
-
-.stage.aspect-vertical {
-  --guide-ratio: 9 / 16;
-}
-
-.stage.aspect-square {
-  --guide-ratio: 1 / 1;
-}
-
-.stage.aspect-wide {
-  --guide-ratio: 16 / 9;
+  box-shadow: 0 0 0 9999px rgba(5, 7, 10, 0.5);
 }
 
 /* ---------- controls ---------- */
+/* position + z-index keep the panel above the stage, which paints its own
+   positioned layer; flex-shrink 0 stops it being squeezed by a tall video. */
 .controls {
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
   background: var(--panel);
   border-top: 1px solid var(--line);
   padding: 14px 18px 16px;

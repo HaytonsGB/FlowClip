@@ -5,7 +5,7 @@ import type {
   ExportProgress,
   ToolStatus
 } from '../../shared/types'
-import { ASPECT_LABELS, mediaUrl } from '../../shared/types'
+import { ASPECT_LABELS, ASPECT_DIMS, mediaUrl } from '../../shared/types'
 import { TrimBar } from './components/TrimBar'
 import { formatBytes, formatTime, clamp } from './lib/format'
 
@@ -16,6 +16,22 @@ type Status =
   | { kind: 'error'; message: string }
 
 const ASPECTS: AspectPreset[] = ['vertical', 'square', 'wide', 'source']
+
+/**
+ * Fraction of the source frame the export will keep, as {w,h} in 0..1.
+ * Mirrors ffmpeg's scale-to-cover then centre-crop so the on-screen guide shows
+ * exactly what survives the export.
+ */
+function cropGuide(
+  meta: VideoMeta | null,
+  aspect: AspectPreset
+): { w: number; h: number } | null {
+  if (!meta || aspect === 'source' || !meta.width || !meta.height) return null
+  const { w, h } = ASPECT_DIMS[aspect]
+  const target = w / h
+  const source = meta.width / meta.height
+  return target < source ? { w: target / source, h: 1 } : { w: 1, h: source / target }
+}
 
 function App(): JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -28,6 +44,23 @@ function App(): JSX.Element {
   const [playing, setPlaying] = useState(false)
   const [aspect, setAspect] = useState<AspectPreset>('vertical')
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
+  const [videoBox, setVideoBox] = useState<{ w: number; h: number } | null>(null)
+
+  /**
+   * The crop guide has to sit exactly over the letterboxed picture, so measure
+   * the element rather than chaining CSS percentages — those resolve against an
+   * indefinite height here and silently collapse.
+   */
+  useEffect(() => {
+    const el = videoRef.current
+    if (!el) return
+    const ro = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect
+      setVideoBox({ w: width, h: height })
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [meta])
 
   useEffect(() => {
     window.api.toolStatus().then(setTools)
@@ -145,6 +178,7 @@ function App(): JSX.Element {
   }, [meta, current, inSec, outSec, togglePlay, seek])
 
   const missingTools = tools && !tools.ready
+  const guide = cropGuide(meta, aspect)
 
   return (
     <div className="app" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
@@ -189,7 +223,7 @@ function App(): JSX.Element {
         </main>
       ) : (
         <main className="editor">
-          <section className={`stage aspect-${aspect}`}>
+          <section className="stage">
             <video
               ref={videoRef}
               src={srcUrl}
@@ -208,7 +242,16 @@ function App(): JSX.Element {
                 })
               }}
             />
-            {aspect !== 'source' && <div className="frame-guide" aria-hidden="true" />}
+            {guide && videoBox && (
+              <div
+                className="frame-guide"
+                style={{
+                  width: `${videoBox.w * guide.w}px`,
+                  height: `${videoBox.h * guide.h}px`
+                }}
+                aria-hidden="true"
+              />
+            )}
           </section>
 
           <section className="controls">
