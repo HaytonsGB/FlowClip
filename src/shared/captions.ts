@@ -18,6 +18,25 @@ export interface CaptionLine {
   end: number
 }
 
+/**
+ * How long each word stays on screen as the highlighted one.
+ *
+ * A word's own start/end covers only while it is being spoken, so between words
+ * the whole line would blank out and snap back — which reads as bad timing
+ * rather than as a pause. Each word instead holds until the next one begins, and
+ * the last word holds to the end of its line, so the line is continuous and only
+ * the highlight moves.
+ */
+export function wordWindows(line: CaptionLine): { start: number; end: number }[] {
+  return line.words.map((word, i) => {
+    const next = line.words[i + 1]
+    return {
+      start: word.start,
+      end: next ? next.start : Math.max(word.end, line.end)
+    }
+  })
+}
+
 export function groupIntoLines(words: CaptionWord[], perLine: number): CaptionLine[] {
   const size = Math.max(1, perLine)
   const lines: CaptionLine[] = []

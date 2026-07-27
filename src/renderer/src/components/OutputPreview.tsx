@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { Region, Rect, CaptionWord, CaptionStyle } from '../../../shared/types'
-import { groupIntoLines } from '../../../shared/captions'
+import { groupIntoLines, wordWindows } from '../../../shared/captions'
 
 interface Props {
   videoRef: React.RefObject<HTMLVideoElement>
@@ -23,15 +23,18 @@ function drawCaptions(
   style: CaptionStyle,
   timeSec: number
 ): void {
-  const index = words.findIndex((w) => timeSec >= w.start && timeSec < w.end)
-  if (index < 0) return
-
-  // Shared with the ASS writer so the preview groups exactly as the export does.
+  // Shared with the ASS writer so the preview shows exactly what the export does:
+  // the line stays up for its whole span, and only the highlight moves.
   const group = groupIntoLines(words, style.wordsPerLine).find(
-    (g) => index >= g.offset && index < g.offset + g.words.length
+    (g) => timeSec >= g.start && timeSec < g.end
   )
   if (!group) return
+
+  const windows = wordWindows(group)
+  const local = windows.findIndex((w) => timeSec >= w.start && timeSec < w.end)
+  if (local < 0) return
   const lineStart = group.offset
+  const index = lineStart + local
   const line = group.words
 
   const fontSize = style.size * canvas.h

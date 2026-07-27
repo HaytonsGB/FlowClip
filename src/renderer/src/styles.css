@@ -1137,24 +1137,23 @@ body {
 }
 
 /* Draggable caption block over the composed output. */
+/* Outline only — a filled box would hide the captions it is positioning. */
 .caption-handle {
   position: absolute;
   left: 0;
   right: 0;
   transform: translateY(-50%);
   min-height: 22px;
-  border: 1.5px dashed rgba(34, 224, 240, 0.75);
+  border: 1.5px dashed rgba(34, 224, 240, 0.5);
   border-radius: 6px;
-  background: rgba(34, 224, 240, 0.09);
+  background: transparent;
   cursor: grab;
   touch-action: none;
-  display: grid;
-  place-items: center;
   transition: background 0.14s, border-color 0.14s;
 }
 
 .caption-handle:hover {
-  background: rgba(34, 224, 240, 0.16);
+  background: rgba(34, 224, 240, 0.1);
   border-color: var(--cyan);
 }
 
@@ -1162,16 +1161,27 @@ body {
   cursor: grabbing;
 }
 
+/* Sits above the box rather than across it, and only while you are on it. */
 .caption-handle-label {
+  position: absolute;
+  bottom: calc(100% + 3px);
+  left: 4px;
   font-size: 8.5px;
   font-weight: 750;
   letter-spacing: 0.6px;
   text-transform: uppercase;
   color: var(--cyan);
-  background: rgba(7, 9, 18, 0.82);
+  background: rgba(7, 9, 18, 0.85);
   padding: 1px 6px;
   border-radius: 4px;
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.14s;
+  white-space: nowrap;
+}
+
+.caption-handle:hover .caption-handle-label {
+  opacity: 1;
 }
 
 /* Grab tab on the bottom edge for scaling the type. */
@@ -1186,6 +1196,12 @@ body {
   background: var(--cyan);
   box-shadow: 0 0 10px rgba(34, 224, 240, 0.7);
   cursor: ns-resize;
+  opacity: 0.45;
+  transition: opacity 0.14s;
+}
+
+.caption-handle:hover .caption-handle-size {
+  opacity: 1;
 }
 
 .caption-line.live .line-text {

@@ -161,7 +161,10 @@ export async function transcribe(
   const args = [
     '-m', modelPath(modelId),
     '-f', wav,
+    // Break at every segment, but on word boundaries — without -sow the split
+    // happens per token, which can cut a word into pieces mid-caption.
     '-ml', '1',
+    '-sow',
     '-oj',
     '-of', outBase,
     '--no-prints'

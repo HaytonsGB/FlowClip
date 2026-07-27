@@ -10,7 +10,7 @@ import { createHash } from 'crypto'
 import { join } from 'path'
 import { app } from 'electron'
 import type { CaptionWord, CaptionStyle } from '../shared/types'
-import { groupIntoLines } from '../shared/captions'
+import { groupIntoLines, wordWindows } from '../shared/captions'
 
 /** ASS colours are &HAABBGGRR — reversed from hex, with alpha first. */
 function assColour(hex: string): string {
@@ -75,8 +75,9 @@ export function buildAss(
   const events: string[] = []
   for (const group of groupIntoLines(words, style.wordsPerLine)) {
     const line = group.words
+    const windows = wordWindows(group)
     for (let i = 0; i < line.length; i++) {
-      const active = line[i]
+      const span = windows[i]
       const text = line
         .map((w, j) => {
           const raw = style.uppercase ? w.text.toUpperCase() : w.text
@@ -87,8 +88,8 @@ export function buildAss(
         .join(' ')
 
       // Times are relative to the exported clip, which starts at the trim point.
-      const start = active.start - clipStartSec
-      const end = Math.max(start + 0.05, active.end - clipStartSec)
+      const start = span.start - clipStartSec
+      const end = Math.max(start + 0.05, span.end - clipStartSec)
       events.push(`Dialogue: 0,${assTime(start)},${assTime(end)},Caption,,0,0,0,,${text}`)
     }
   }
