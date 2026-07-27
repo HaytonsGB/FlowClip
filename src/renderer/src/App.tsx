@@ -79,8 +79,10 @@ function App(): JSX.Element {
   const [projectSec, setProjectSec] = useState(0)
   /** Source time to apply once a newly selected clip has loaded. */
   const pendingSeek = useRef<number | null>(null)
-  /** Whether playback should resume after that load. */
+  /** Whether the user wants playback running, independent of element state. */
   const wantPlay = useRef(false)
+  /** Source the element has actually loaded, to spot a no-op src change. */
+  const loadedSrc = useRef('')
   const [playing, setPlaying] = useState(false)
   const [aspect, setAspect] = useState<AspectPreset>('vertical')
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
@@ -307,48 +309,75 @@ function App(): JSX.Element {
     if (v.paused) {
       // Restart from the top if the playhead is sitting at the very end.
       if (projectSec >= total - 0.05) seekProject(0)
+      // Tracks intent rather than element state: the element is paused between
+      // clips while the next source loads, and again when one ends.
+      wantPlay.current = true
       void v.play()
     } else {
+      wantPlay.current = false
       v.pause()
     }
   }, [projectSec, total, seekProject])
 
   /** Applies a seek that was waiting on the new source to finish loading. */
-  const onLoadedMetadata = useCallback(() => {
+  const applyPendingSeek = useCallback(() => {
     const v = videoRef.current
-    if (!v) return
-    if (pendingSeek.current !== null) {
-      v.currentTime = pendingSeek.current
-      pendingSeek.current = null
-      if (wantPlay.current) void v.play()
-    }
+    if (!v || pendingSeek.current === null) return
+    v.currentTime = pendingSeek.current
+    pendingSeek.current = null
+    if (wantPlay.current) void v.play()
   }, [])
+
+  const onLoadedMetadata = useCallback(() => {
+    loadedSrc.current = srcUrl
+    applyPendingSeek()
+  }, [srcUrl, applyPendingSeek])
+
+  /**
+   * Two clips can come from the same file — two moments of one recording — in
+   * which case the element's source never changes and no load event fires. The
+   * waiting seek would then never be applied, so it is applied here instead.
+   */
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v || pendingSeek.current === null) return
+    if (loadedSrc.current === srcUrl && v.readyState >= 1) applyPendingSeek()
+  }, [activeId, srcUrl, applyPendingSeek])
+
+  /** Moves to the next clip, or stops if this was the last one. */
+  const advanceClip = useCallback(() => {
+    const v = videoRef.current
+    if (!v || !active) return
+    const span = spanOf(spans, active.id)
+    const next = span ? spans[span.index + 1] : null
+
+    if (next) {
+      pendingSeek.current = next.clip.inSec
+      setProjectSec(next.start)
+      setActiveId(next.clip.id)
+      setSelectedRegion(null)
+    } else {
+      v.pause()
+      wantPlay.current = false
+      setProjectSec(total)
+    }
+  }, [active, spans, total])
 
   const onTimeUpdate = useCallback(() => {
     const v = videoRef.current
     if (!v || !active) return
 
-    // Rolled past this clip's out point: move to the next one, or stop at the end.
-    if (v.currentTime >= active.outSec - 0.02) {
-      const span = spanOf(spans, active.id)
-      const next = span ? spans[span.index + 1] : null
-      if (next) {
-        wantPlay.current = !v.paused
-        pendingSeek.current = next.clip.inSec
-        setProjectSec(next.start)
-        setActiveId(next.clip.id)
-        setSelectedRegion(null)
-      } else {
-        v.pause()
-        wantPlay.current = false
-        setProjectSec(total)
-      }
+    // Rolled past this clip's out point — only meaningful for a trimmed clip;
+    // one playing to its natural end is caught by 'ended' instead, because
+    // timeupdate fires a few times a second and can skip this window entirely.
+    if (v.currentTime >= active.outSec - 0.05) {
+      advanceClip()
       return
     }
 
     const span = spanOf(spans, active.id)
     if (span) setProjectSec(projectTimeOf(span, v.currentTime))
-  }, [active, spans, total])
+  }, [active, spans, advanceClip])
 
   const doExport = useCallback(async () => {
     if (!meta) return
@@ -727,6 +756,7 @@ function App(): JSX.Element {
               className="video"
               onTimeUpdate={onTimeUpdate}
               onLoadedMetadata={onLoadedMetadata}
+              onEnded={advanceClip}
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
               onClick={togglePlay}
