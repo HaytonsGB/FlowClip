@@ -87,45 +87,51 @@ export function TrimBar({
         ))}
       </div>
 
-      <div
-        className="trimbar-track"
-        ref={trackRef}
-        style={stripUrl ? { backgroundImage: `url("${stripUrl}")` } : undefined}
-        onPointerDown={(e) => onSeek(secAtClientX(e.clientX))}
-      >
-        <div className="trimbar-dim" style={{ left: 0, width: pct(inSec) }} />
-        <div className="trimbar-dim" style={{ left: pct(outSec), right: 0 }} />
+      {/* Handles sit in an unclipped layer above the track, otherwise the track's
+          overflow:hidden slices them in half at 0% and 100%. */}
+      <div className="trimbar-stage">
         <div
-          className="trimbar-selection"
-          style={{ left: pct(inSec), width: pct(outSec - inSec) }}
+          className="trimbar-track"
+          ref={trackRef}
+          style={stripUrl ? { backgroundImage: `url("${stripUrl}")` } : undefined}
+          onPointerDown={(e) => onSeek(secAtClientX(e.clientX))}
         >
-          <span className="selection-badge">{formatTime(outSec - inSec)}</span>
+          <div className="trimbar-dim" style={{ left: 0, width: pct(inSec) }} />
+          <div className="trimbar-dim" style={{ left: pct(outSec), right: 0 }} />
+          <div
+            className="trimbar-selection"
+            style={{ left: pct(inSec), width: pct(outSec - inSec) }}
+          >
+            <span className="selection-badge">{formatTime(outSec - inSec)}</span>
+          </div>
+          <div className="trimbar-playhead" style={{ left: pct(current) }} />
         </div>
-        <div className="trimbar-playhead" style={{ left: pct(current) }} />
 
-        <div
-          className="trimbar-handle in"
-          style={{ left: pct(inSec) }}
-          onPointerDown={startDrag('in')}
-          role="slider"
-          aria-label="Clip start"
-          aria-valuenow={inSec}
-          title="Drag to set where the clip starts"
-          tabIndex={0}
-        >
-          <span className="grip" />
-        </div>
-        <div
-          className="trimbar-handle out"
-          style={{ left: pct(outSec) }}
-          onPointerDown={startDrag('out')}
-          role="slider"
-          aria-label="Clip end"
-          aria-valuenow={outSec}
-          title="Drag to set where the clip ends"
-          tabIndex={0}
-        >
-          <span className="grip" />
+        <div className="handle-layer">
+          <div
+            className="trimbar-handle in"
+            style={{ left: pct(inSec) }}
+            onPointerDown={startDrag('in')}
+            role="slider"
+            aria-label="Clip start"
+            aria-valuenow={inSec}
+            title="Drag to set where the clip starts"
+            tabIndex={0}
+          >
+            <span className="grip" />
+          </div>
+          <div
+            className="trimbar-handle out"
+            style={{ left: pct(outSec) }}
+            onPointerDown={startDrag('out')}
+            role="slider"
+            aria-label="Clip end"
+            aria-valuenow={outSec}
+            title="Drag to set where the clip ends"
+            tabIndex={0}
+          >
+            <span className="grip" />
+          </div>
         </div>
       </div>
 

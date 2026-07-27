@@ -99,11 +99,14 @@ body {
   letter-spacing: 0.2px;
 }
 
+/* The artwork is neon on near-black; screen blending drops the black so the
+   ribbon reads as a mark instead of a grey tile. */
 .brand-mark {
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
   object-fit: contain;
-  filter: drop-shadow(0 0 9px rgba(157, 123, 255, 0.65));
+  mix-blend-mode: screen;
+  filter: saturate(1.2) drop-shadow(0 0 10px rgba(157, 123, 255, 0.55));
 }
 
 .brand-name {
@@ -214,11 +217,12 @@ body {
 }
 
 .dropzone-mark {
-  width: 108px;
-  height: 108px;
+  width: 120px;
+  height: 120px;
   object-fit: contain;
   margin-bottom: 18px;
-  filter: drop-shadow(0 0 26px rgba(157, 123, 255, 0.6));
+  mix-blend-mode: screen;
+  filter: saturate(1.15) drop-shadow(0 0 26px rgba(157, 123, 255, 0.55));
 }
 
 .dropzone h1 {
@@ -440,6 +444,17 @@ body {
 }
 
 /* ---------- timeline ---------- */
+.trimbar-stage {
+  position: relative;
+}
+
+/* Unclipped overlay so end handles stay whole and grabbable. */
+.handle-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
 .trimbar-track {
   position: relative;
   height: 60px;
@@ -467,13 +482,12 @@ body {
   bottom: 0;
   background: linear-gradient(
     180deg,
-    rgba(34, 224, 240, 0.13),
-    rgba(157, 123, 255, 0.05) 45%,
-    rgba(244, 114, 230, 0.13)
+    rgba(34, 224, 240, 0.06),
+    transparent 40% 60%,
+    rgba(244, 114, 230, 0.06)
   );
   border-top: 2px solid var(--cyan);
   border-bottom: 2px solid var(--magenta);
-  box-shadow: inset 0 0 26px rgba(34, 224, 240, 0.14);
   pointer-events: none;
 }
 
@@ -506,6 +520,7 @@ body {
 
 .trimbar-handle {
   position: absolute;
+  pointer-events: auto;
   top: -3px;
   bottom: -3px;
   width: 18px;
