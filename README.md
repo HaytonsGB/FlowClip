@@ -15,8 +15,8 @@ FFmpeg is bundled, so there is nothing else to install. Windows may warn that th
 is unknown — the installer is not code signed. Choose **More info → Run anyway** if you are
 happy to.
 
-> **Early build.** Trimming, reframing and layout compositing work end to end. Captions,
-> music and multi-clip editing are not built yet — see the roadmap.
+> **Early build.** Trimming, layout compositing and captions work end to end. Music and
+> multi-clip editing are not built yet — see the roadmap.
 
 ## What it does today
 
@@ -40,13 +40,26 @@ gameplay band on 1:1, and full-screen gameplay with picture-in-picture insets on
 The output preview is a canvas replaying the same maths FFmpeg will apply, so what you
 arrange is what renders.
 
+**Captions** — transcribed on your machine with whisper.cpp. Nothing is uploaded, and there
+is no per-minute charge. You get word-level timings, so the caption pops word by word rather
+than sitting there as a block of subtitle. Four styles, a colour picker for the spoken word,
+and the caption block is dragged into place on the output like any other layer.
+
+The transcript is editable line by line — rewrite a line and it keeps its timing, with the
+words re-spaced across it. You can also write captions from scratch: **Add line** drops one at
+the playhead, so a clip with no speech at all can still be captioned.
+
+Voice activity detection is on by default. Without it whisper spreads word timings across
+silence — given three seconds of quiet before speech it puts the first word at 0:00, so the
+opening caption sits on screen before anyone talks.
+
 ## Roadmap
 
 | Milestone | What lands | Status |
 | --- | --- | --- |
 | M1 | Load · preview · trim · reframe · export | ✅ |
 | M1.5 | Multi-region layout compositor, packaged installer | ✅ |
-| M2 | Whisper auto-captions, running locally | ⬜ |
+| M2 | Local Whisper captions, styled and editable | ✅ |
 | M3 | Multi-clip timeline, media pool, music & SFX | ⬜ |
 | M4 | Text, meme and sticker overlays | ⬜ |
 | M5 | Transitions, effects, export presets | ⬜ |
@@ -60,6 +73,7 @@ arrange is what renders.
 | `←` `→` | Step one frame — or nudge the selected box in Layout |
 | `Shift` + arrows | Jump 5 seconds — or nudge a box further |
 | `Shift` + drag | Resize a layout box keeping its shape |
+| `Enter` | Commit a caption line you are editing |
 
 ## How it works
 
@@ -70,6 +84,9 @@ arrange is what renders.
   region, composited onto a generated canvas.
 - Rounded corners come from a generated alpha mask that is rendered once and cached — the
   per-pixel expression that draws one is far too slow to run per frame.
+- **whisper.cpp** transcribes locally; captions are burned in as an ASS track, one event per
+  word so the timing is exactly what whisper reported. A word stays on screen until the next
+  one begins, otherwise the line blinks out during every pause between words.
 - The renderer has no Node access; it talks to the main process over a narrow preload bridge
   (`src/preload/index.ts`).
 
@@ -78,11 +95,18 @@ arrange is what renders.
 ```bash
 npm install
 npm run setup:ffmpeg
+npm run setup:whisper
 npm run dev
 ```
 
 `setup:ffmpeg` fetches a static FFmpeg build into `resources/bin` so nothing needs installing
 system-wide. If FFmpeg is already on your `PATH`, FlowClip uses that instead.
+
+`setup:whisper` fetches whisper.cpp into `resources/whisper` and prunes it — the release
+archive is 68 MB of server, streaming and test binaries plus a 49 MB OpenBLAS that made no
+measurable difference here (1.60s vs 1.63s on an 11s clip), so only what `whisper-cli` loads
+is kept, taking it under 10 MB. Speech models are downloaded on first use rather than
+bundled.
 
 ## Building the installer
 

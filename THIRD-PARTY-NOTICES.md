@@ -22,6 +22,21 @@ absent from LGPL builds. The complete corresponding source for the bundled binar
 available from the FFmpeg repository above, and the exact scripts used to produce them from
 the BtbN repository.
 
+## whisper.cpp — MIT
+
+`whisper-cli.exe` and its libraries are bundled with the installer, along with the Silero
+voice activity detection model.
+
+| | |
+| --- | --- |
+| Licence | MIT |
+| Build used | [ggml-org/whisper.cpp](https://github.com/ggml-org/whisper.cpp) releases (`whisper-blas-bin-x64`) |
+| VAD model | [ggml-org/whisper-vad](https://huggingface.co/ggml-org/whisper-vad) — Silero VAD, MIT |
+
+FlowClip invokes whisper.cpp as a separate executable and contains no code from it. Speech
+recognition models are downloaded from Hugging Face on first use rather than redistributed,
+and remain under their own licences — the Whisper weights are MIT (OpenAI).
+
 ## Electron and npm dependencies
 
 Electron is MIT licensed, as are React, and the remaining runtime dependencies. Each package
