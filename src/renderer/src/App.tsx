@@ -11,6 +11,7 @@ import { ToolRail, type ToolId } from './components/ToolRail'
 import { ToolPanel } from './components/ToolPanel'
 import { PlayIcon, PauseIcon, ExportIcon } from './components/Icons'
 import { formatBytes, formatTime, clamp } from './lib/format'
+import markUrl from './assets/mark.png'
 
 type Status =
   | { kind: 'idle' }
@@ -201,10 +202,8 @@ function App(): JSX.Element {
     <div className="app" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
       <header className="topbar">
         <div className="brand">
-          <span className="brand-mark">◣</span>
-          <span className="brand-name">
-            Flow<span className="brand-accent">Clip</span>
-          </span>
+          <img className="brand-mark" src={markUrl} alt="" />
+          <span className="brand-name">FlowClip</span>
         </div>
         <div className="topbar-actions">
           <button className="btn" onClick={openFile}>
@@ -230,7 +229,7 @@ function App(): JSX.Element {
       {!meta ? (
         <main className="dropzone">
           <div className="dropzone-inner">
-            <div className="dropzone-icon">◣</div>
+            <img className="dropzone-mark" src={markUrl} alt="" />
             <h1>Drop a video here</h1>
             <p>Trim it, reframe it for TikTok or Shorts, export it. All local, all yours.</p>
             <button className="btn primary" onClick={openFile}>

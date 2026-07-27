@@ -10,6 +10,13 @@ const VIDEO_EXTS = ['mp4', 'mov', 'mkv', 'avi', 'webm', 'm4v', 'flv', 'wmv']
 
 let mainWindow: BrowserWindow | null = null
 
+/** resources/ sits next to the app in dev and inside the bundle once packaged. */
+function resourcePath(name: string): string {
+  return app.isPackaged
+    ? join(process.resourcesPath, name)
+    : join(app.getAppPath(), 'resources', name)
+}
+
 /**
  * The renderer runs on http:// in dev, so it cannot load file:// media directly.
  * This privileged scheme streams local files instead. `stream: true` is what makes
@@ -30,8 +37,9 @@ function createWindow(): void {
     minHeight: 640,
     show: false,
     autoHideMenuBar: true,
-    backgroundColor: '#0b0d12',
+    backgroundColor: '#070912',
     title: 'FlowClip',
+    icon: resourcePath('logo.png'),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
