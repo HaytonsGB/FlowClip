@@ -57,9 +57,30 @@ export function OutputPreview({ videoRef, regions, canvas, revision }: Props): J
           const dw = region.dst.w * canvas.w
           const dh = region.dst.h * canvas.h
           if (dw < 1 || dh < 1) continue
-          const [sx, sy, sw, sh] = coverCrop(region.src, vw, vh, dw / dh)
+
           try {
-            ctx.drawImage(video, sx, sy, sw, sh, dx, dy, dw, dh)
+            if (region.fit === 'contain') {
+              // Whole source, scaled down and centred; the slack stays black.
+              const sw = region.src.w * vw
+              const sh = region.src.h * vh
+              const scale = Math.min(dw / sw, dh / sh)
+              const w = sw * scale
+              const h = sh * scale
+              ctx.drawImage(
+                video,
+                region.src.x * vw,
+                region.src.y * vh,
+                sw,
+                sh,
+                dx + (dw - w) / 2,
+                dy + (dh - h) / 2,
+                w,
+                h
+              )
+            } else {
+              const [sx, sy, sw, sh] = coverCrop(region.src, vw, vh, dw / dh)
+              ctx.drawImage(video, sx, sy, sw, sh, dx, dy, dw, dh)
+            }
           } catch {
             // Frame not decodable yet; the next tick will pick it up.
           }

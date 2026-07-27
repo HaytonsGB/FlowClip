@@ -4,7 +4,8 @@ import type {
   AspectPreset,
   ExportProgress,
   ToolStatus,
-  Region
+  Region,
+  FitMode
 } from '../../shared/types'
 import {
   ASPECT_DIMS,
@@ -14,6 +15,7 @@ import {
   newRegion
 } from '../../shared/types'
 import { RegionRect } from './components/RegionRect'
+import { LayersPanel } from './components/LayersPanel'
 import { OutputPreview } from './components/OutputPreview'
 import { useFit } from './lib/useFit'
 import { TrimBar } from './components/TrimBar'
@@ -271,6 +273,48 @@ function App(): JSX.Element {
     [centreAuto, meta, canvasDims]
   )
 
+  const addRegion = useCallback(() => {
+    const r = newRegion(`Box ${regions.length + 1}`)
+    setRegions((rs) => [...rs, r])
+    setSelectedRegion(r.id)
+    setActivePreset(null)
+    setRevision((n) => n + 1)
+  }, [regions.length])
+
+  const removeRegion = useCallback((id: string) => {
+    setRegions((rs) => rs.filter((r) => r.id !== id))
+    setActivePreset(null)
+    setRevision((n) => n + 1)
+  }, [])
+
+  /** dir 1 brings a layer forward (later in paint order), -1 sends it back. */
+  const moveRegion = useCallback((id: string, dir: -1 | 1) => {
+    setRegions((rs) => {
+      const i = rs.findIndex((r) => r.id === id)
+      const j = i + dir
+      if (i < 0 || j < 0 || j >= rs.length) return rs
+      const next = [...rs]
+      ;[next[i], next[j]] = [next[j], next[i]]
+      return next
+    })
+    setRevision((n) => n + 1)
+  }, [])
+
+  const setFit = useCallback(
+    (id: string, fit: FitMode) => {
+      setRegions((rs) =>
+        rs.map((r) =>
+          r.id === id
+            ? // Fit shows the whole frame, so an auto-centred crop no longer applies.
+              { ...r, fit, ...(fit === 'contain' ? { auto: false } : {}) }
+            : r
+        )
+      )
+      setRevision((n) => n + 1)
+    },
+    []
+  )
+
   // Switching canvas changes the correct centred crop, so re-solve auto boxes.
   useEffect(() => {
     if (!meta || !canvasDims) return
@@ -435,6 +479,18 @@ function App(): JSX.Element {
               </div>
             </div>
           )}
+
+          {tool === 'layout' && (
+            <LayersPanel
+              regions={regions}
+              selectedId={selectedRegion}
+              onSelect={setSelectedRegion}
+              onMove={moveRegion}
+              onRemove={removeRegion}
+              onAdd={addRegion}
+              onFit={setFit}
+            />
+          )}
           </section>
 
           <section className="controls">
@@ -475,24 +531,8 @@ function App(): JSX.Element {
                   setInSec(0)
                   setOutSec(meta.durationSec)
                 }}
-                regions={regions}
-                selectedId={selectedRegion}
                 activePreset={activePreset}
-                onSelectRegion={setSelectedRegion}
                 onApplyPreset={applyPreset}
-                onAddRegion={() => {
-                  const r = newRegion(`Box ${regions.length + 1}`)
-                  setRegions((rs) => [...rs, r])
-                  setSelectedRegion(r.id)
-                  // The layout no longer matches any preset.
-                  setActivePreset(null)
-                  setRevision((n) => n + 1)
-                }}
-                onRemoveRegion={(id) => {
-                  setRegions((rs) => rs.filter((r) => r.id !== id))
-                  setActivePreset(null)
-                  setRevision((n) => n + 1)
-                }}
               />
               <button
                 className="btn primary export"

@@ -36,11 +36,21 @@ export interface Rect {
  * clip keeps its facecam, gameplay and minimap instead of centre-cropping them
  * away.
  */
+/**
+ * How a box's source fills its output slot.
+ * - `cover` crops the overflow so the slot is filled edge to edge.
+ * - `contain` keeps the whole source visible and letterboxes the remainder,
+ *   which is what you want for gameplay in a stacked layout: the action stays
+ *   whole instead of losing its sides to a shorter slot.
+ */
+export type FitMode = 'cover' | 'contain'
+
 export interface Region {
   id: string
   label: string
   src: Rect
   dst: Rect
+  fit?: FitMode
   /**
    * Keep `src` locked to the centred crop that exactly fills `dst`. Set on
    * gameplay boxes so the main action never needs to be eyeballed, and cleared
@@ -108,14 +118,16 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
       {
         id: rid(),
         label: 'Camera',
+        fit: 'cover',
         src: { x: 0.02, y: 0.56, w: 0.26, h: 0.4 },
         dst: { x: 0, y: 0, w: 1, h: 0.34 }
       },
       {
         id: rid(),
         label: 'Gameplay',
-        auto: true,
-        src: { x: 0.3, y: 0.06, w: 0.4, h: 0.88 },
+        // Whole frame, letterboxed — a shorter slot must not crop the action.
+        fit: 'contain',
+        src: { x: 0, y: 0, w: 1, h: 1 },
         dst: { x: 0, y: 0.34, w: 1, h: 0.66 }
       }
     ]
@@ -128,19 +140,21 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
       {
         id: rid(),
         label: 'Camera',
+        fit: 'cover',
         src: { x: 0.02, y: 0.56, w: 0.26, h: 0.4 },
         dst: { x: 0, y: 0, w: 1, h: 0.3 }
       },
       {
         id: rid(),
         label: 'Gameplay',
-        auto: true,
-        src: { x: 0.3, y: 0.06, w: 0.4, h: 0.88 },
+        fit: 'contain',
+        src: { x: 0, y: 0, w: 1, h: 1 },
         dst: { x: 0, y: 0.3, w: 1, h: 0.52 }
       },
       {
         id: rid(),
         label: 'Minimap',
+        fit: 'cover',
         src: { x: 0.78, y: 0.04, w: 0.2, h: 0.26 },
         dst: { x: 0.02, y: 0.83, w: 0.45, h: 0.15 }
       }

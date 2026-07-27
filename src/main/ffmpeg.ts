@@ -221,11 +221,16 @@ export function buildCompositeArgs(req: CompositeExportRequest): string[] {
   regions.forEach((region, i) => {
     const s = toPixels(region.src, srcWidth, srcHeight)
     const d = toPixels(region.dst, canvas.w, canvas.h)
-    steps.push(
-      `[s${i}]crop=${s.w}:${s.h}:${s.x}:${s.y},` +
-        `scale=${d.w}:${d.h}:force_original_aspect_ratio=increase,` +
-        `crop=${d.w}:${d.h},setsar=1[r${i}]`
-    )
+    const crop = `crop=${s.w}:${s.h}:${s.x}:${s.y}`
+
+    const shape =
+      region.fit === 'contain'
+        ? // Scale down to fit, then pad the slack so the slot stays its full size.
+          `scale=${d.w}:${d.h}:force_original_aspect_ratio=decrease,` +
+          `pad=${d.w}:${d.h}:(ow-iw)/2:(oh-ih)/2:color=black`
+        : `scale=${d.w}:${d.h}:force_original_aspect_ratio=increase,crop=${d.w}:${d.h}`
+
+    steps.push(`[s${i}]${crop},${shape},setsar=1[r${i}]`)
   })
 
   // Chain the overlays: bg + r0 -> o0, o0 + r1 -> o1, ...

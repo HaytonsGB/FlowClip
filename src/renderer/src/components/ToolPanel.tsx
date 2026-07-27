@@ -1,7 +1,7 @@
-import type { AspectPreset, Region } from '../../../shared/types'
+import type { AspectPreset } from '../../../shared/types'
 import { ASPECT_LABELS, LAYOUT_PRESETS } from '../../../shared/types'
 import { TOOLS, type ToolId } from './ToolRail'
-import { MarkInIcon, MarkOutIcon, ResetIcon, PlusIcon, TrashIcon } from './Icons'
+import { MarkInIcon, MarkOutIcon, ResetIcon } from './Icons'
 
 const ASPECTS: AspectPreset[] = ['vertical', 'square', 'wide', 'source']
 
@@ -41,13 +41,8 @@ interface Props {
   onSetIn: () => void
   onSetOut: () => void
   onReset: () => void
-  regions: Region[]
-  selectedId: string | null
   activePreset: string | null
-  onSelectRegion: (id: string) => void
   onApplyPreset: (id: string) => void
-  onAddRegion: () => void
-  onRemoveRegion: (id: string) => void
 }
 
 export function ToolPanel({
@@ -57,13 +52,8 @@ export function ToolPanel({
   onSetIn,
   onSetOut,
   onReset,
-  regions,
-  selectedId,
   activePreset,
-  onSelectRegion,
-  onApplyPreset,
-  onAddRegion,
-  onRemoveRegion
+  onApplyPreset
 }: Props): JSX.Element {
   if (tool === 'trim') {
     return (
@@ -118,38 +108,10 @@ export function ToolPanel({
           </div>
         </div>
 
-        <div className="layout-row">
-          <span className="panel-label">Boxes</span>
-          <div className="region-list">
-            {regions.map((r, i) => (
-              <span
-                key={r.id}
-                className={`region-pill ${selectedId === r.id ? 'active' : ''}`}
-                onClick={() => onSelectRegion(r.id)}
-              >
-                <i className="region-dot" data-index={i % 4} />
-                {r.label}
-                <button
-                  className="region-del"
-                  title={`Remove ${r.label}`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onRemoveRegion(r.id)
-                  }}
-                >
-                  <TrashIcon size={12} />
-                </button>
-              </span>
-            ))}
-            <button className="btn small" onClick={onAddRegion}>
-              <PlusIcon size={14} /> Add box
-            </button>
-          </div>
-        </div>
-
         <p className="panel-hint">
-          Pick a box to select it, then drag it on the <b>Source</b> to choose what it grabs, or on
-          the <b>Output</b> to place it.
+          Pick a layer on the right, then drag it on the <b>Source</b> to choose what it grabs, or
+          on the <b>Output</b> to place it. <b>Fill</b> crops a box to its slot; <b>Fit</b> keeps
+          the whole frame and letterboxes the slack.
         </p>
       </div>
     )

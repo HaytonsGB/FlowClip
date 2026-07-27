@@ -64,6 +64,24 @@ export function PlusIcon(p: IconProps): JSX.Element {
   )
 }
 
+export function ArrowUpIcon(p: IconProps): JSX.Element {
+  return (
+    <Svg {...p}>
+      <line x1="12" y1="19" x2="12" y2="5" />
+      <path d="M6 11l6-6 6 6" />
+    </Svg>
+  )
+}
+
+export function ArrowDownIcon(p: IconProps): JSX.Element {
+  return (
+    <Svg {...p}>
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <path d="M6 13l6 6 6-6" />
+    </Svg>
+  )
+}
+
 export function TrashIcon(p: IconProps): JSX.Element {
   return (
     <Svg {...p}>
