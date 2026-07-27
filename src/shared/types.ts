@@ -1,5 +1,13 @@
 /** Types shared between the Electron main process and the renderer UI. */
 
+/** Custom scheme used to stream local media into the renderer. */
+export const MEDIA_SCHEME = 'flowclip'
+
+/** Build a renderer-loadable URL for a file on disk. */
+export function mediaUrl(filePath: string): string {
+  return `${MEDIA_SCHEME}://media/?src=${encodeURIComponent(filePath)}`
+}
+
 export interface VideoMeta {
   path: string
   fileName: string

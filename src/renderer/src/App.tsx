@@ -5,7 +5,7 @@ import type {
   ExportProgress,
   ToolStatus
 } from '../../shared/types'
-import { ASPECT_LABELS } from '../../shared/types'
+import { ASPECT_LABELS, mediaUrl } from '../../shared/types'
 import { TrimBar } from './components/TrimBar'
 import { formatBytes, formatTime, clamp } from './lib/format'
 
@@ -45,7 +45,7 @@ function App(): JSX.Element {
     try {
       const m = await window.api.probe(filePath)
       setMeta(m)
-      setSrcUrl(`file://${filePath.replace(/\\/g, '/')}`)
+      setSrcUrl(mediaUrl(filePath))
       setInSec(0)
       setOutSec(m.durationSec)
       setCurrent(0)
@@ -64,8 +64,8 @@ function App(): JSX.Element {
     (e: React.DragEvent) => {
       e.preventDefault()
       const file = e.dataTransfer.files?.[0]
-      // Electron exposes the real disk path on dropped files.
-      const path = (file as File & { path?: string })?.path
+      if (!file) return
+      const path = window.api.pathForFile(file)
       if (path) void loadPath(path)
     },
     [loadPath]
@@ -198,6 +198,15 @@ function App(): JSX.Element {
               onPlay={() => setPlaying(true)}
               onPause={() => setPlaying(false)}
               onClick={togglePlay}
+              onError={() => {
+                const err = videoRef.current?.error
+                setStatus({
+                  kind: 'error',
+                  message: `Couldn't play this file in the preview${
+                    err?.message ? ` — ${err.message}` : ''
+                  }. The codec may not be supported by Chromium (exporting can still work).`
+                })
+              }}
             />
             {aspect !== 'source' && <div className="frame-guide" aria-hidden="true" />}
           </section>

@@ -1,12 +1,26 @@
-import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron'
 import { join, basename, extname, dirname } from 'path'
+import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { probe, runExport, toolStatus, rescanTools } from './ffmpeg'
+import { MEDIA_SCHEME } from '../shared/types'
 import type { ExportRequest, ExportResult } from '../shared/types'
 
 const VIDEO_EXTS = ['mp4', 'mov', 'mkv', 'avi', 'webm', 'm4v', 'flv', 'wmv']
 
 let mainWindow: BrowserWindow | null = null
+
+/**
+ * The renderer runs on http:// in dev, so it cannot load file:// media directly.
+ * This privileged scheme streams local files instead. `stream: true` is what makes
+ * range requests — and therefore seeking within a video — work.
+ */
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: MEDIA_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true }
+  }
+])
 
 function createWindow(): void {
   mainWindow = new BrowserWindow({
@@ -41,6 +55,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.flowclip.app')
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
+  registerMediaProtocol()
   registerIpc()
   createWindow()
 
@@ -52,6 +67,24 @@ app.whenReady().then(() => {
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
+
+/**
+ * Serves `flowclip://media/?src=<encoded absolute path>`.
+ *
+ * The path travels as a query param rather than in the URL path: standard schemes
+ * canonicalise pathnames, which mangles Windows drive letters and backslashes.
+ */
+function registerMediaProtocol(): void {
+  protocol.handle(MEDIA_SCHEME, async (request) => {
+    try {
+      const src = new URL(request.url).searchParams.get('src')
+      if (!src) return new Response('missing src', { status: 400 })
+      return await net.fetch(pathToFileURL(src).toString(), { headers: request.headers })
+    } catch (err) {
+      return new Response(err instanceof Error ? err.message : 'media error', { status: 404 })
+    }
+  })
+}
 
 function registerIpc(): void {
   ipcMain.handle('tools:status', () => toolStatus())

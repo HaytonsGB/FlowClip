@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron'
+import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type {
   VideoMeta,
@@ -20,6 +20,9 @@ const api = {
     ipcRenderer.invoke('dialog:saveClip', suggestedName),
   exportClip: (req: ExportRequest): Promise<ExportResult> => ipcRenderer.invoke('clip:export', req),
   revealFile: (filePath: string): Promise<void> => ipcRenderer.invoke('shell:revealFile', filePath),
+
+  /** Electron 33 removed File.path; this is the supported replacement. */
+  pathForFile: (file: File): string => webUtils.getPathForFile(file),
 
   /** Returns an unsubscribe fn so React effects can clean up. */
   onExportProgress: (cb: (p: ExportProgress) => void): (() => void) => {
