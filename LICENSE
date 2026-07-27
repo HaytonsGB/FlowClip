@@ -1,0 +1,43 @@
+MIT License
+
+Copyright (c) 2026 HaytonsGB
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+THIRD-PARTY COMPONENTS
+
+FlowClip's own source code is MIT licensed as above. The Windows installer also
+redistributes the following, which carry their own terms:
+
+FFmpeg (ffmpeg.exe, ffprobe.exe)
+  Licence : GNU General Public License v3 or later
+  Build   : https://github.com/BtbN/FFmpeg-Builds  (win64-gpl)
+  Source  : https://github.com/FFmpeg/FFmpeg
+  Licence text: https://www.gnu.org/licenses/gpl-3.0.html
+
+  FlowClip invokes FFmpeg as a separate executable and contains no FFmpeg code,
+  so the two remain separate works. The GPL build is used because H.264 export
+  depends on libx264, which is not present in LGPL builds. The complete
+  corresponding source for the bundled binaries is available at the FFmpeg
+  repository above, and the exact build scripts at the BtbN repository.
+
+Electron, React and the other npm dependencies are distributed under their own
+licences; see the respective packages for details.
