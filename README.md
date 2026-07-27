@@ -19,13 +19,34 @@ Roadmap:
 | M4 | Text, meme and sticker overlays |
 | M5 | Transitions, effects, export presets, installer |
 
-## Setup
+## Install
+
+Run `release/FlowClip-Setup-<version>.exe`. ffmpeg is bundled, so there is nothing else to
+install.
+
+## Development
 
 ```bash
 npm install
 npm run setup:ffmpeg
 npm run dev
 ```
+
+## Building the installer
+
+```bash
+npm run dist
+```
+
+Output lands in `release/`. Two things that will bite you:
+
+- **Close any running FlowClip first.** A running copy holds `d3dcompiler_47.dll` open and the
+  build fails with `Access is denied` while clearing `release/win-unpacked`.
+- **`win.signAndEditExecutable` is off.** electron-builder otherwise downloads a code-signing
+  toolchain whose archive contains macOS symlinks, and Windows refuses to create those without
+  Developer Mode or elevation. The cost is that the exe carries no embedded icon or version
+  metadata — the window and taskbar icon still come from `BrowserWindow` at runtime. Turn
+  Developer Mode on and delete that line to get a fully branded exe.
 
 `setup:ffmpeg` downloads a static ffmpeg/ffprobe build into `resources/bin` so you don't
 have to install it system-wide. If ffmpeg is already on your PATH, FlowClip will use that

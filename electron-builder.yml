@@ -1,0 +1,47 @@
+appId: com.flowclip.app
+productName: FlowClip
+copyright: Copyright © 2026 HaytonsGB
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+  - '!**/*.map'
+
+# ffmpeg lives outside the asar archive: it is spawned as a child process, so it
+# has to be a real file on disk. `to: bin` puts it at resources/bin, which is
+# exactly what binDir() looks for when app.isPackaged.
+extraResources:
+  - from: resources/bin
+    to: bin
+    filter: ['**/*']
+  - from: resources/logo.png
+    to: logo.png
+
+asar: true
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+  artifactName: FlowClip-Setup-${version}.${ext}
+  # Skips the winCodeSign toolchain, whose archive contains macOS symlinks that
+  # Windows refuses to create without Developer Mode or elevation. We do not
+  # sign, so the only loss is icon/version metadata stamped into the exe — the
+  # window and taskbar icon still come from BrowserWindow at runtime.
+  signAndEditExecutable: false
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: FlowClip
+  # 275 MB of ffmpeg dominates the payload; maximum compression is worth the
+  # extra build time here.
+  differentialPackage: false
