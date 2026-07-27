@@ -88,6 +88,10 @@ function App(): JSX.Element {
 
   /** null on 'source', which means "no compositing, just trim". */
   const canvasDims = aspect === 'source' ? null : ASPECT_DIMS[aspect]
+  /** Tools that need the composed output pane beside the source. */
+  const showComposite = tool === 'layout' || tool === 'captions'
+  /** Region boxes are only draggable in Layout; elsewhere they would be noise. */
+  const editRegions = tool === 'layout'
 
   const updateRegion = useCallback((id: string, patch: Partial<Region>) => {
     setRegions((rs) =>
@@ -540,13 +544,16 @@ function App(): JSX.Element {
         <main className="editor">
           <ToolRail active={tool} onSelect={setTool} disabled={false} />
           <div className="workspace">
-          <section className={`stage ${tool === 'layout' ? 'split' : ''}`}>
+          {/* Captions need the composed output on screen too, so you can see
+              where they land against the layout you built. */}
+          <section className={`stage ${showComposite ? 'split' : ''}`}>
           <div className="pane">
-            {tool === 'layout' && (
+            {showComposite && (
               <div className="pane-head">
                 <span className="pane-title">Source</span>
                 <span className="pane-sub">
-                  {meta.width}×{meta.height} — drag a box to pick what it grabs
+                  {meta.width}×{meta.height}
+                  {editRegions ? ' — drag a box to pick what it grabs' : ''}
                 </span>
               </div>
             )}
@@ -569,7 +576,7 @@ function App(): JSX.Element {
                 })
               }}
             />
-            {tool !== 'layout' && guide && pictureBox && (
+            {!showComposite && guide && pictureBox && (
               <div
                 className="frame-guide"
                 style={{
@@ -581,7 +588,7 @@ function App(): JSX.Element {
             )}
 
             {/* Source boxes, aligned to the letterboxed picture rather than the pane. */}
-            {tool === 'layout' && pictureBox && (
+            {editRegions && pictureBox && (
               <div
                 className="overlay-frame"
                 ref={pictureRef}
@@ -604,12 +611,14 @@ function App(): JSX.Element {
             </div>
           </div>
 
-          {tool === 'layout' && (
+          {showComposite && (
             <div className="pane output">
               <div className="pane-head">
                 <span className="pane-title out">Output</span>
                 <span className="pane-sub">
-                  {canvasDims ? `${canvasDims.w}×${canvasDims.h} — drag to place` : 'no canvas'}
+                  {canvasDims
+                    ? `${canvasDims.w}×${canvasDims.h}${editRegions ? ' — drag to place' : ''}`
+                    : 'no canvas'}
                 </span>
               </div>
               <div className="pane-body" ref={outPaneRef}>
@@ -627,20 +636,21 @@ function App(): JSX.Element {
                     words={words}
                     captionStyle={capStyle}
                   />
-                  {regions.map((r) => (
-                    <RegionRect
-                      key={r.id}
-                      rect={r.dst}
-                      onChange={(dst) => updateRegion(r.id, { dst })}
-                      boundsRef={outFrameRef}
-                      label={r.label}
-                      tone="dst"
-                      selected={selectedRegion === r.id}
-                      onSelect={() => setSelectedRegion(r.id)}
-                      snapX={snapGuides.xs}
-                      snapY={snapGuides.ys}
-                    />
-                  ))}
+                  {editRegions &&
+                    regions.map((r) => (
+                      <RegionRect
+                        key={r.id}
+                        rect={r.dst}
+                        onChange={(dst) => updateRegion(r.id, { dst })}
+                        boundsRef={outFrameRef}
+                        label={r.label}
+                        tone="dst"
+                        selected={selectedRegion === r.id}
+                        onSelect={() => setSelectedRegion(r.id)}
+                        snapX={snapGuides.xs}
+                        snapY={snapGuides.ys}
+                      />
+                    ))}
                 </div>
               ) : (
                 <p className="pane-empty">

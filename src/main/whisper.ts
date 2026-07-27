@@ -10,7 +10,7 @@ import { createWriteStream, existsSync, mkdirSync, readFileSync, rmSync, statSyn
 import { createHash } from 'crypto'
 import { join } from 'path'
 import { pipeline } from 'stream/promises'
-import { Readable } from 'stream'
+import { Readable, Transform } from 'stream'
 import { app } from 'electron'
 import { toolStatus } from './ffmpeg'
 import type { CaptionWord, WhisperModelId, ModelProgress } from '../shared/types'
@@ -62,12 +62,25 @@ export async function downloadModel(
   let received = 0
 
   const body = Readable.fromWeb(res.body as Parameters<typeof Readable.fromWeb>[0])
-  body.on('data', (chunk: Buffer) => {
-    received += chunk.length
-    onProgress({ received, total, percent: total ? received / total : 0 })
+
+  // Count bytes with a pass-through rather than a 'data' listener: attaching one
+  // puts the stream into flowing mode before pipeline() hooks up the writer, and
+  // the chunks emitted in between are lost — producing a file of roughly the
+  // right size that whisper then refuses to load.
+  const counter = new Transform({
+    transform(chunk: Buffer, _enc, cb) {
+      received += chunk.length
+      onProgress({ received, total, percent: total ? received / total : 0 })
+      cb(null, chunk)
+    }
   })
 
-  await pipeline(body, createWriteStream(tmp))
+  await pipeline(body, counter, createWriteStream(tmp))
+
+  if (total > 0 && received !== total) {
+    rmSync(tmp, { force: true })
+    throw new Error(`Model download truncated: got ${received} of ${total} bytes`)
+  }
 
   // Rename only once complete, so an interrupted download never looks ready.
   const { renameSync } = await import('fs')
