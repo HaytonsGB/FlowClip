@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
   VideoMeta,
   AspectPreset,
@@ -46,11 +46,7 @@ function App(): JSX.Element {
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const [videoBox, setVideoBox] = useState<{ w: number; h: number } | null>(null)
 
-  /**
-   * The crop guide has to sit exactly over the letterboxed picture, so measure
-   * the element rather than chaining CSS percentages — those resolve against an
-   * indefinite height here and silently collapse.
-   */
+  /** Element box. The picture inside it is letterboxed by object-fit: contain. */
   useEffect(() => {
     const el = videoRef.current
     if (!el) return
@@ -180,6 +176,14 @@ function App(): JSX.Element {
   const missingTools = tools && !tools.ready
   const guide = cropGuide(meta, aspect)
 
+  /** Where the picture actually sits inside the element after letterboxing. */
+  const pictureBox = useMemo(() => {
+    if (!meta || !videoBox || !meta.width || !meta.height) return null
+    const ratio = meta.width / meta.height
+    const w = Math.min(videoBox.w, videoBox.h * ratio)
+    return { w, h: w / ratio }
+  }, [meta, videoBox])
+
   return (
     <div className="app" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
       <header className="topbar">
@@ -242,12 +246,12 @@ function App(): JSX.Element {
                 })
               }}
             />
-            {guide && videoBox && (
+            {guide && pictureBox && (
               <div
                 className="frame-guide"
                 style={{
-                  width: `${videoBox.w * guide.w}px`,
-                  height: `${videoBox.h * guide.h}px`
+                  width: `${pictureBox.w * guide.w}px`,
+                  height: `${pictureBox.h * guide.h}px`
                 }}
                 aria-hidden="true"
               />
