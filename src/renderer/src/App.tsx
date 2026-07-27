@@ -22,6 +22,8 @@ import {
   CAPTION_PRESETS
 } from '../../shared/types'
 import { CaptionsPanel, type CaptionJob } from './components/CaptionsPanel'
+import { TranscriptPanel } from './components/TranscriptPanel'
+import { CaptionHandle } from './components/CaptionHandle'
 import { retimeLine, replaceLine } from '../../shared/captions'
 import { RegionRect } from './components/RegionRect'
 import { LayersPanel } from './components/LayersPanel'
@@ -636,6 +638,13 @@ function App(): JSX.Element {
                     words={words}
                     captionStyle={capStyle}
                   />
+                  {tool === 'captions' && words.length > 0 && (
+                    <CaptionHandle
+                      style={capStyle}
+                      boundsRef={outFrameRef}
+                      onChange={(patch) => setCapStyle((s) => ({ ...s, ...patch }))}
+                    />
+                  )}
                   {editRegions &&
                     regions.map((r) => (
                       <RegionRect
@@ -659,6 +668,22 @@ function App(): JSX.Element {
               )}
               </div>
             </div>
+          )}
+
+          {tool === 'captions' && words.length > 0 && (
+            <TranscriptPanel
+              words={words}
+              wordsPerLine={capStyle.wordsPerLine}
+              currentSec={current}
+              onSeek={seek}
+              onEditLine={(line, text) =>
+                setWords((ws) => replaceLine(ws, line, retimeLine(line, text)))
+              }
+              onEditWord={(i, text) =>
+                setWords((ws) => ws.map((w, j) => (j === i ? { ...w, text } : w)))
+              }
+              onRemoveWord={(i) => setWords((ws) => ws.filter((_, j) => j !== i))}
+            />
           )}
 
           {tool === 'layout' && (
@@ -717,14 +742,6 @@ function App(): JSX.Element {
                     setCapStyle({ preset: p, ...CAPTION_PRESETS[p] })
                   }
                   onStyle={(patch) => setCapStyle((s) => ({ ...s, ...patch }))}
-                  onEditWord={(i, text) =>
-                    setWords((ws) => ws.map((w, j) => (j === i ? { ...w, text } : w)))
-                  }
-                  onRemoveWord={(i) => setWords((ws) => ws.filter((_, j) => j !== i))}
-                  onEditLine={(line, text) =>
-                    setWords((ws) => replaceLine(ws, line, retimeLine(line, text)))
-                  }
-                  onSeek={seek}
                   onClear={() => {
                     setWords([])
                     setCapJob({ kind: 'idle' })

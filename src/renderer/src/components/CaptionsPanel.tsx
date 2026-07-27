@@ -9,10 +9,7 @@ import {
   CAPTION_PRESETS,
   WHISPER_MODELS
 } from '../../../shared/types'
-import { useMemo, useState } from 'react'
-import { groupIntoLines, type CaptionLine } from '../../../shared/captions'
-import { CaptionsIcon, TrashIcon } from './Icons'
-import { formatTime } from '../lib/format'
+import { CaptionsIcon } from './Icons'
 
 export type CaptionJob =
   | { kind: 'idle' }
@@ -30,10 +27,6 @@ interface Props {
   onTranscribe: () => void
   onPreset: (p: CaptionPreset) => void
   onStyle: (patch: Partial<CaptionStyle>) => void
-  onEditWord: (index: number, text: string) => void
-  onRemoveWord: (index: number) => void
-  onEditLine: (line: CaptionLine, text: string) => void
-  onSeek: (sec: number) => void
   onClear: () => void
 }
 
@@ -50,18 +43,9 @@ export function CaptionsPanel({
   onTranscribe,
   onPreset,
   onStyle,
-  onEditWord,
-  onRemoveWord,
-  onEditLine,
-  onSeek,
   onClear
 }: Props): JSX.Element {
   const busy = job.kind === 'downloading' || job.kind === 'working'
-  const [mode, setMode] = useState<'line' | 'word'>('line')
-  const lines = useMemo(
-    () => groupIntoLines(words, style.wordsPerLine),
-    [words, style.wordsPerLine]
-  )
 
   return (
     <div className="panel">
@@ -132,17 +116,6 @@ export function CaptionsPanel({
                 onChange={(e) => onStyle({ size: Number(e.target.value) })}
               />
             </label>
-            <label className="mini-field">
-              Height
-              <input
-                type="range"
-                min={0.1}
-                max={0.92}
-                step={0.02}
-                value={style.position}
-                onChange={(e) => onStyle({ position: Number(e.target.value) })}
-              />
-            </label>
             <label className="mini-field colour">
               Word
               <input
@@ -153,82 +126,9 @@ export function CaptionsPanel({
             </label>
           </div>
 
-          <div className="edit-mode">
-            <button
-              className={`chip ${mode === 'line' ? 'active' : ''}`}
-              onClick={() => setMode('line')}
-            >
-              Line by line
-            </button>
-            <button
-              className={`chip ${mode === 'word' ? 'active' : ''}`}
-              onClick={() => setMode('word')}
-            >
-              Word by word
-            </button>
-            <span className="edit-count">
-              {lines.length} lines · {words.length} words
-            </span>
-          </div>
-
-          {mode === 'line' ? (
-            <div className="transcript lines" role="list">
-              {lines.map((line) => (
-                <div className="caption-line" key={`${line.offset}-${line.start}`} role="listitem">
-                  <button
-                    className="line-time"
-                    onClick={() => onSeek(line.start)}
-                    title="Jump to this line"
-                  >
-                    {formatTime(line.start)}
-                  </button>
-                  <input
-                    className="line-text"
-                    defaultValue={line.words.map((w) => w.text).join(' ')}
-                    onBlur={(e) => onEditLine(line, e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') (e.target as HTMLInputElement).blur()
-                    }}
-                    spellCheck={false}
-                    placeholder="(empty — will be removed)"
-                  />
-                  <button
-                    className="word-del always"
-                    onClick={() => onEditLine(line, '')}
-                    title="Delete this line"
-                  >
-                    <TrashIcon size={12} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <div className="transcript" role="list">
-              {words.map((w, i) => (
-                <span className="word-chip" key={`${i}-${w.start}`} role="listitem">
-                  <input
-                    value={w.text}
-                    onChange={(e) => onEditWord(i, e.target.value)}
-                    size={Math.max(2, w.text.length)}
-                    title={`${formatTime(w.start)} → ${formatTime(w.end)}`}
-                    spellCheck={false}
-                  />
-                  <button
-                    className="word-del"
-                    onClick={() => onRemoveWord(i)}
-                    title="Remove this word"
-                  >
-                    <TrashIcon size={11} />
-                  </button>
-                </span>
-              ))}
-            </div>
-          )}
-
           <p className="panel-hint">
-            {mode === 'line'
-              ? 'Rewrite a whole line and press Enter — the line keeps its timing and the words re-space themselves across it. Click a timestamp to jump there.'
-              : 'Fix individual words Whisper misheard. Each word keeps its own timing.'}
+            Drag the caption block on the <b>Output</b> to place it. Edit the wording in the
+            transcript on the right — rewriting a line keeps its timing.
           </p>
         </>
       )}

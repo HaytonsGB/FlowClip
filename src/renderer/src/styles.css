@@ -1116,24 +1116,81 @@ body {
 }
 
 /* ---------- transcript editing ---------- */
-.edit-mode {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+/* Wider than the layers rail: caption lines are sentences, not labels. */
+.transcript-side {
+  flex: 0 0 268px;
 }
 
-.edit-count {
-  font-size: 10.5px;
-  color: var(--dim);
-  margin-left: auto;
-  font-variant-numeric: tabular-nums;
+.transcript-side .pane-head {
+  justify-content: space-between;
 }
 
-.transcript.lines {
-  flex-direction: column;
-  flex-wrap: nowrap;
+.transcript-side .layers-list {
   gap: 5px;
-  max-height: 132px;
+}
+
+.transcript-side .transcript {
+  border: none;
+  background: none;
+  padding: 0;
+  max-height: none;
+}
+
+/* Draggable caption block over the composed output. */
+.caption-handle {
+  position: absolute;
+  left: 0;
+  right: 0;
+  transform: translateY(-50%);
+  min-height: 22px;
+  border: 1.5px dashed rgba(34, 224, 240, 0.75);
+  border-radius: 6px;
+  background: rgba(34, 224, 240, 0.09);
+  cursor: grab;
+  touch-action: none;
+  display: grid;
+  place-items: center;
+  transition: background 0.14s, border-color 0.14s;
+}
+
+.caption-handle:hover {
+  background: rgba(34, 224, 240, 0.16);
+  border-color: var(--cyan);
+}
+
+.caption-handle:active {
+  cursor: grabbing;
+}
+
+.caption-handle-label {
+  font-size: 8.5px;
+  font-weight: 750;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--cyan);
+  background: rgba(7, 9, 18, 0.82);
+  padding: 1px 6px;
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+/* Grab tab on the bottom edge for scaling the type. */
+.caption-handle-size {
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 34px;
+  height: 9px;
+  border-radius: 5px;
+  background: var(--cyan);
+  box-shadow: 0 0 10px rgba(34, 224, 240, 0.7);
+  cursor: ns-resize;
+}
+
+.caption-line.live .line-text {
+  border-color: rgba(34, 224, 240, 0.6);
+  background: rgba(34, 224, 240, 0.1);
 }
 
 .caption-line {
