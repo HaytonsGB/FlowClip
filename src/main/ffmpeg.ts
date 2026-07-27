@@ -9,7 +9,14 @@ import { existsSync, mkdirSync, statSync } from 'fs'
 import { createHash } from 'crypto'
 import { join } from 'path'
 import { app } from 'electron'
-import type { VideoMeta, ExportRequest, ExportProgress, ToolStatus } from '../shared/types'
+import type {
+  VideoMeta,
+  ExportRequest,
+  ExportProgress,
+  ToolStatus,
+  CompositeExportRequest,
+  Rect
+} from '../shared/types'
 import { ASPECT_DIMS } from '../shared/types'
 
 const EXE = process.platform === 'win32' ? '.exe' : ''
@@ -176,6 +183,81 @@ export function buildExportArgs(req: ExportRequest): string[] {
   return args
 }
 
+/** yuv420p needs even dimensions, and crop offsets must stay inside the frame. */
+function evenClamp(value: number, max: number): number {
+  const v = Math.round(value / 2) * 2
+  return Math.max(0, Math.min(v, max))
+}
+
+/** Convert a normalised rect to even pixel values inside a WxH frame. */
+function toPixels(rect: Rect, W: number, H: number): { x: number; y: number; w: number; h: number } {
+  const w = Math.max(2, evenClamp(rect.w * W, W))
+  const h = Math.max(2, evenClamp(rect.h * H, H))
+  return {
+    x: evenClamp(rect.x * W, W - w),
+    y: evenClamp(rect.y * H, H - h),
+    w,
+    h
+  }
+}
+
+/**
+ * Builds a filter graph that paints each region onto a blank canvas:
+ * split the source once per region, crop and scale each, then overlay them in
+ * order. This is what lets a vertical export keep the facecam, the gameplay and
+ * the minimap instead of centre-cropping to one of them.
+ */
+export function buildCompositeArgs(req: CompositeExportRequest): string[] {
+  const { regions, srcWidth, srcHeight, canvas } = req
+  if (regions.length === 0) throw new Error('Add at least one box to the layout')
+
+  const duration = Math.max(0.05, req.endSec - req.startSec)
+  const steps: string[] = [`color=c=black:s=${canvas.w}x${canvas.h}:d=${duration.toFixed(3)}[bg]`]
+
+  // One split output per region; ffmpeg cannot consume a stream twice.
+  const labels = regions.map((_, i) => `[s${i}]`).join('')
+  steps.push(`[0:v]split=${regions.length}${labels}`)
+
+  regions.forEach((region, i) => {
+    const s = toPixels(region.src, srcWidth, srcHeight)
+    const d = toPixels(region.dst, canvas.w, canvas.h)
+    steps.push(
+      `[s${i}]crop=${s.w}:${s.h}:${s.x}:${s.y},` +
+        `scale=${d.w}:${d.h}:force_original_aspect_ratio=increase,` +
+        `crop=${d.w}:${d.h},setsar=1[r${i}]`
+    )
+  })
+
+  // Chain the overlays: bg + r0 -> o0, o0 + r1 -> o1, ...
+  regions.forEach((region, i) => {
+    const base = i === 0 ? '[bg]' : `[o${i - 1}]`
+    const d = toPixels(region.dst, canvas.w, canvas.h)
+    steps.push(`${base}[r${i}]overlay=${d.x}:${d.y}[o${i}]`)
+  })
+
+  const finalLabel = `[o${regions.length - 1}]`
+
+  return [
+    '-hide_banner',
+    '-y',
+    '-ss', req.startSec.toFixed(3),
+    '-i', req.inputPath,
+    '-t', duration.toFixed(3),
+    '-filter_complex', steps.join(';'),
+    '-map', finalLabel,
+    // '?' keeps the export working when the source has no audio track.
+    '-map', '0:a?',
+    '-c:v', 'libx264',
+    '-preset', 'veryfast',
+    '-crf', '20',
+    '-pix_fmt', 'yuv420p',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    '-movflags', '+faststart',
+    req.outputPath
+  ]
+}
+
 /** Pulls `out_time_ms=` / `speed=` lines out of ffmpeg's -progress stream. */
 function parseProgress(chunk: string, totalSec: number): ExportProgress | null {
   const timeMatch = /out_time_ms=(\d+)/.exec(chunk)
@@ -193,11 +275,33 @@ export function runExport(
   req: ExportRequest,
   onProgress: (p: ExportProgress) => void
 ): Promise<void> {
+  return runFfmpeg(
+    buildExportArgs(req),
+    Math.max(0.05, req.endSec - req.startSec),
+    onProgress
+  )
+}
+
+export function runCompositeExport(
+  req: CompositeExportRequest,
+  onProgress: (p: ExportProgress) => void
+): Promise<void> {
+  return runFfmpeg(
+    buildCompositeArgs(req),
+    Math.max(0.05, req.endSec - req.startSec),
+    onProgress
+  )
+}
+
+function runFfmpeg(
+  baseArgs: string[],
+  totalSec: number,
+  onProgress: (p: ExportProgress) => void
+): Promise<void> {
   const { ffmpegPath } = toolStatus()
   if (!ffmpegPath) return Promise.reject(new Error('ffmpeg not found'))
 
-  const totalSec = Math.max(0.05, req.endSec - req.startSec)
-  const args = ['-progress', 'pipe:1', '-nostats', ...buildExportArgs(req)]
+  const args = ['-progress', 'pipe:1', '-nostats', ...baseArgs]
 
   return new Promise((resolve, reject) => {
     const proc = spawn(ffmpegPath, args)

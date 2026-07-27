@@ -1,6 +1,6 @@
 import {
   ScissorsIcon,
-  CropIcon,
+  LayersIcon,
   CaptionsIcon,
   MusicIcon,
   TextIcon,
@@ -8,7 +8,7 @@ import {
   EffectsIcon
 } from './Icons'
 
-export type ToolId = 'trim' | 'reframe' | 'captions' | 'audio' | 'text' | 'stickers' | 'effects'
+export type ToolId = 'trim' | 'layout' | 'captions' | 'audio' | 'text' | 'stickers' | 'effects'
 
 export interface Tool {
   id: ToolId
@@ -20,7 +20,7 @@ export interface Tool {
 
 export const TOOLS: Tool[] = [
   { id: 'trim', label: 'Trim', icon: ScissorsIcon },
-  { id: 'reframe', label: 'Reframe', icon: CropIcon },
+  { id: 'layout', label: 'Layout', icon: LayersIcon },
   { id: 'captions', label: 'Captions', icon: CaptionsIcon, milestone: 'M2' },
   { id: 'audio', label: 'Music', icon: MusicIcon, milestone: 'M3' },
   { id: 'text', label: 'Text', icon: TextIcon, milestone: 'M4' },

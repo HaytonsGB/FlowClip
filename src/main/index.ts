@@ -2,9 +2,16 @@ import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net } from 'elect
 import { join, basename, extname, dirname } from 'path'
 import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { probe, runExport, toolStatus, rescanTools, filmstrip } from './ffmpeg'
+import {
+  probe,
+  runExport,
+  runCompositeExport,
+  toolStatus,
+  rescanTools,
+  filmstrip
+} from './ffmpeg'
 import { MEDIA_SCHEME } from '../shared/types'
-import type { ExportRequest, ExportResult } from '../shared/types'
+import type { ExportRequest, ExportResult, CompositeExportRequest } from '../shared/types'
 
 const VIDEO_EXTS = ['mp4', 'mov', 'mkv', 'avi', 'webm', 'm4v', 'flv', 'wmv']
 
@@ -138,6 +145,20 @@ function registerIpc(): void {
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
     }
   })
+
+  ipcMain.handle(
+    'clip:exportComposite',
+    async (event, req: CompositeExportRequest): Promise<ExportResult> => {
+      try {
+        await runCompositeExport(req, (p) => {
+          if (!event.sender.isDestroyed()) event.sender.send('clip:progress', p)
+        })
+        return { ok: true, outputPath: req.outputPath }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
 
   ipcMain.handle('shell:revealFile', (_e, filePath: string) => {
     shell.showItemInFolder(filePath)

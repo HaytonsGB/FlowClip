@@ -45,6 +45,35 @@ export function CropIcon(p: IconProps): JSX.Element {
   )
 }
 
+export function LayersIcon(p: IconProps): JSX.Element {
+  return (
+    <Svg {...p}>
+      <rect x="3.5" y="3" width="17" height="7" rx="1.6" />
+      <rect x="3.5" y="13" width="10" height="8" rx="1.6" />
+      <rect x="15.5" y="13" width="5" height="8" rx="1.6" />
+    </Svg>
+  )
+}
+
+export function PlusIcon(p: IconProps): JSX.Element {
+  return (
+    <Svg {...p}>
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </Svg>
+  )
+}
+
+export function TrashIcon(p: IconProps): JSX.Element {
+  return (
+    <Svg {...p}>
+      <path d="M4 6.5h16" />
+      <path d="M9 6.5V4.5h6v2" />
+      <path d="M6 6.5l1 13h10l1-13" />
+    </Svg>
+  )
+}
+
 export function CaptionsIcon(p: IconProps): JSX.Element {
   return (
     <Svg {...p}>

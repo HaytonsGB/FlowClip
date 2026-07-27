@@ -3,9 +3,18 @@ import type {
   VideoMeta,
   AspectPreset,
   ExportProgress,
-  ToolStatus
+  ToolStatus,
+  Region
 } from '../../shared/types'
-import { ASPECT_DIMS, mediaUrl } from '../../shared/types'
+import {
+  ASPECT_DIMS,
+  LAYOUT_PRESETS,
+  mediaUrl,
+  newRegion
+} from '../../shared/types'
+import { RegionRect } from './components/RegionRect'
+import { OutputPreview } from './components/OutputPreview'
+import { useFit } from './lib/useFit'
 import { TrimBar } from './components/TrimBar'
 import { ToolRail, type ToolId } from './components/ToolRail'
 import { ToolPanel } from './components/ToolPanel'
@@ -49,6 +58,16 @@ function App(): JSX.Element {
   const [videoBox, setVideoBox] = useState<{ w: number; h: number } | null>(null)
   const [stripUrl, setStripUrl] = useState('')
   const [tool, setTool] = useState<ToolId>('trim')
+  const [regions, setRegions] = useState<Region[]>([])
+  const [selectedRegion, setSelectedRegion] = useState<string | null>(null)
+  /** Bumped on any region edit so the paused canvas preview repaints. */
+  const [revision, setRevision] = useState(0)
+  const pictureRef = useRef<HTMLDivElement>(null)
+  const outPaneRef = useRef<HTMLDivElement>(null)
+  const outFrameRef = useRef<HTMLDivElement>(null)
+
+  /** null on 'source', which means "no compositing, just trim". */
+  const canvasDims = aspect === 'source' ? null : ASPECT_DIMS[aspect]
 
   /** Element box. The picture inside it is letterboxed by object-fit: contain. */
   useEffect(() => {
@@ -84,6 +103,12 @@ function App(): JSX.Element {
       setCurrent(0)
       setStatus({ kind: 'idle' })
       setStripUrl('')
+      // Start on the single centred box — same result as a plain reframe, but
+      // now it is an editable layout rather than a fixed crop.
+      const initial = LAYOUT_PRESETS[0].build()
+      setRegions(initial)
+      setSelectedRegion(initial[0]?.id ?? null)
+      setRevision((n) => n + 1)
       // Thumbnails are a nicety. Isolated in its own try because a missing
       // bridge method throws synchronously and would otherwise surface as an
       // "this video failed to load" error.
@@ -152,17 +177,33 @@ function App(): JSX.Element {
     if (!outputPath) return
 
     setStatus({ kind: 'exporting', percent: 0, speed: '' })
-    const result = await window.api.exportClip({
-      inputPath: meta.path,
-      outputPath,
-      startSec: inSec,
-      endSec: outSec,
-      aspect,
-      reencode: false
-    })
+
+    // A canvas plus boxes means compositing; 'source' is a plain trim, which can
+    // stream-copy and stays much faster.
+    const result =
+      canvasDims && regions.length > 0
+        ? await window.api.exportComposite({
+            inputPath: meta.path,
+            outputPath,
+            startSec: inSec,
+            endSec: outSec,
+            regions,
+            srcWidth: meta.width,
+            srcHeight: meta.height,
+            canvas: canvasDims
+          })
+        : await window.api.exportClip({
+            inputPath: meta.path,
+            outputPath,
+            startSec: inSec,
+            endSec: outSec,
+            aspect,
+            reencode: false
+          })
+
     if (result.ok && result.outputPath) setStatus({ kind: 'done', path: result.outputPath })
     else setStatus({ kind: 'error', message: result.error ?? 'Export failed' })
-  }, [meta, inSec, outSec, aspect])
+  }, [meta, inSec, outSec, aspect, canvasDims, regions])
 
   // Space toggles play, I/O set the trim points — the shortcuts editors expect.
   useEffect(() => {
@@ -189,6 +230,21 @@ function App(): JSX.Element {
 
   const missingTools = tools && !tools.ready
   const guide = cropGuide(meta, aspect)
+  const outBox = useFit(outPaneRef, canvasDims ? canvasDims.w / canvasDims.h : 1)
+
+  const updateRegion = useCallback((id: string, patch: Partial<Region>) => {
+    setRegions((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)))
+    setRevision((n) => n + 1)
+  }, [])
+
+  const applyPreset = useCallback((presetId: string) => {
+    const preset = LAYOUT_PRESETS.find((p) => p.id === presetId)
+    if (!preset) return
+    const next = preset.build()
+    setRegions(next)
+    setSelectedRegion(next[0]?.id ?? null)
+    setRevision((n) => n + 1)
+  }, [])
 
   /** Where the picture actually sits inside the element after letterboxing. */
   const pictureBox = useMemo(() => {
@@ -241,7 +297,8 @@ function App(): JSX.Element {
         <main className="editor">
           <ToolRail active={tool} onSelect={setTool} disabled={false} />
           <div className="workspace">
-          <section className="stage">
+          <section className={`stage ${tool === 'layout' ? 'split' : ''}`}>
+          <div className="pane">
             <video
               ref={videoRef}
               src={srcUrl}
@@ -260,7 +317,7 @@ function App(): JSX.Element {
                 })
               }}
             />
-            {guide && pictureBox && (
+            {tool !== 'layout' && guide && pictureBox && (
               <div
                 className="frame-guide"
                 style={{
@@ -270,6 +327,68 @@ function App(): JSX.Element {
                 aria-hidden="true"
               />
             )}
+
+            {/* Source boxes, aligned to the letterboxed picture rather than the pane. */}
+            {tool === 'layout' && pictureBox && (
+              <div
+                className="overlay-frame"
+                ref={pictureRef}
+                style={{ width: `${pictureBox.w}px`, height: `${pictureBox.h}px` }}
+              >
+                {regions.map((r) => (
+                  <RegionRect
+                    key={r.id}
+                    rect={r.src}
+                    onChange={(src) => updateRegion(r.id, { src })}
+                    boundsRef={pictureRef}
+                    label={r.label}
+                    tone="src"
+                    selected={selectedRegion === r.id}
+                    onSelect={() => setSelectedRegion(r.id)}
+                  />
+                ))}
+              </div>
+            )}
+            {tool === 'layout' && <span className="pane-tag">Source</span>}
+          </div>
+
+          {tool === 'layout' && (
+            <div className="pane output" ref={outPaneRef}>
+              {canvasDims && outBox ? (
+                <div
+                  className="overlay-frame"
+                  ref={outFrameRef}
+                  style={{ width: `${outBox.w}px`, height: `${outBox.h}px` }}
+                >
+                  <OutputPreview
+                    videoRef={videoRef}
+                    regions={regions}
+                    canvas={canvasDims}
+                    revision={revision}
+                  />
+                  {regions.map((r) => (
+                    <RegionRect
+                      key={r.id}
+                      rect={r.dst}
+                      onChange={(dst) => updateRegion(r.id, { dst })}
+                      boundsRef={outFrameRef}
+                      label={r.label}
+                      tone="dst"
+                      selected={selectedRegion === r.id}
+                      onSelect={() => setSelectedRegion(r.id)}
+                    />
+                  ))}
+                </div>
+              ) : (
+                <p className="pane-empty">
+                  Pick a canvas other than <b>Source</b> to compose a layout.
+                </p>
+              )}
+              <span className="pane-tag">
+                Output {canvasDims ? `${canvasDims.w}×${canvasDims.h}` : ''}
+              </span>
+            </div>
+          )}
           </section>
 
           <section className="controls">
@@ -310,7 +429,20 @@ function App(): JSX.Element {
                   setInSec(0)
                   setOutSec(meta.durationSec)
                 }}
-                cropPercent={guide ? Math.round(Math.min(guide.w, guide.h) * 100) : null}
+                regions={regions}
+                selectedId={selectedRegion}
+                onSelectRegion={setSelectedRegion}
+                onApplyPreset={applyPreset}
+                onAddRegion={() => {
+                  const r = newRegion(`Box ${regions.length + 1}`)
+                  setRegions((rs) => [...rs, r])
+                  setSelectedRegion(r.id)
+                  setRevision((n) => n + 1)
+                }}
+                onRemoveRegion={(id) => {
+                  setRegions((rs) => rs.filter((r) => r.id !== id))
+                  setRevision((n) => n + 1)
+                }}
               />
               <button
                 className="btn primary export"

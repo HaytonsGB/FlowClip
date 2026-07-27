@@ -1,7 +1,7 @@
-import type { AspectPreset } from '../../../shared/types'
-import { ASPECT_LABELS } from '../../../shared/types'
+import type { AspectPreset, Region } from '../../../shared/types'
+import { ASPECT_LABELS, LAYOUT_PRESETS } from '../../../shared/types'
 import { TOOLS, type ToolId } from './ToolRail'
-import { MarkInIcon, MarkOutIcon, ResetIcon } from './Icons'
+import { MarkInIcon, MarkOutIcon, ResetIcon, PlusIcon, TrashIcon } from './Icons'
 
 const ASPECTS: AspectPreset[] = ['vertical', 'square', 'wide', 'source']
 
@@ -41,7 +41,12 @@ interface Props {
   onSetIn: () => void
   onSetOut: () => void
   onReset: () => void
-  cropPercent: number | null
+  regions: Region[]
+  selectedId: string | null
+  onSelectRegion: (id: string) => void
+  onApplyPreset: (id: string) => void
+  onAddRegion: () => void
+  onRemoveRegion: (id: string) => void
 }
 
 export function ToolPanel({
@@ -51,7 +56,12 @@ export function ToolPanel({
   onSetIn,
   onSetOut,
   onReset,
-  cropPercent
+  regions,
+  selectedId,
+  onSelectRegion,
+  onApplyPreset,
+  onAddRegion,
+  onRemoveRegion
 }: Props): JSX.Element {
   if (tool === 'trim') {
     return (
@@ -68,33 +78,80 @@ export function ToolPanel({
           </button>
         </div>
         <p className="panel-hint">
-          Drag the teal and purple handles on the timeline, or park the playhead and use these
+          Drag the cyan and magenta handles on the timeline, or park the playhead and use these
           buttons. Playback loops inside your selection so you preview the real clip.
         </p>
       </div>
     )
   }
 
-  if (tool === 'reframe') {
+  if (tool === 'layout') {
     return (
       <div className="panel">
-        <div className="aspect-picker">
-          {ASPECTS.map((a) => (
-            <button
-              key={a}
-              className={`chip ${aspect === a ? 'active' : ''}`}
-              onClick={() => onAspect(a)}
-            >
-              {ASPECT_LABELS[a]}
-            </button>
-          ))}
+        <div className="layout-row">
+          <span className="panel-label">Canvas</span>
+          <div className="aspect-picker">
+            {ASPECTS.map((a) => (
+              <button
+                key={a}
+                className={`chip ${aspect === a ? 'active' : ''}`}
+                onClick={() => onAspect(a)}
+              >
+                {ASPECT_LABELS[a]}
+              </button>
+            ))}
+          </div>
         </div>
+
+        <div className="layout-row">
+          <span className="panel-label">Preset</span>
+          <div className="aspect-picker">
+            {LAYOUT_PRESETS.map((p) => (
+              <button
+                key={p.id}
+                className="chip"
+                onClick={() => onApplyPreset(p.id)}
+                title={p.description}
+              >
+                {p.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="layout-row">
+          <span className="panel-label">Boxes</span>
+          <div className="region-list">
+            {regions.map((r, i) => (
+              <span
+                key={r.id}
+                className={`region-pill ${selectedId === r.id ? 'active' : ''}`}
+                onClick={() => onSelectRegion(r.id)}
+              >
+                <i className="region-dot" data-index={i % 4} />
+                {r.label}
+                <button
+                  className="region-del"
+                  title={`Remove ${r.label}`}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onRemoveRegion(r.id)
+                  }}
+                >
+                  <TrashIcon size={12} />
+                </button>
+              </span>
+            ))}
+            <button className="btn small" onClick={onAddRegion}>
+              <PlusIcon size={14} /> Add box
+            </button>
+          </div>
+        </div>
+
         <p className="panel-hint">
-          {aspect === 'source'
-            ? 'Keeping the original framing — nothing is cropped.'
-            : `The teal box on the video is what gets kept${
-                cropPercent !== null ? ` — the middle ${cropPercent}% of the frame` : ''
-              }. Anything outside it is cut. A draggable crop is coming so you can choose which part to keep.`}
+          Left is your source — drag a box to choose what it grabs. Right is the finished clip —
+          drag the matching box to place it. Stack a facecam, the gameplay and the minimap instead
+          of cropping them away.
         </p>
       </div>
     )

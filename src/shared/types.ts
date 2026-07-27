@@ -22,6 +22,120 @@ export interface VideoMeta {
 /** Social export targets. `source` keeps the original aspect ratio. */
 export type AspectPreset = 'source' | 'vertical' | 'square' | 'wide'
 
+/** A rectangle in 0..1 space, so layouts survive any source resolution. */
+export interface Rect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+/**
+ * One box in the composed output: take `src` out of the source video and paint
+ * it into `dst` on the output canvas. Several of these stacked is how a gaming
+ * clip keeps its facecam, gameplay and minimap instead of centre-cropping them
+ * away.
+ */
+export interface Region {
+  id: string
+  label: string
+  src: Rect
+  dst: Rect
+}
+
+export interface LayoutPreset {
+  id: string
+  name: string
+  description: string
+  build: () => Region[]
+}
+
+let regionSeq = 0
+function rid(): string {
+  return `r${Date.now().toString(36)}${(regionSeq++).toString(36)}`
+}
+
+export const LAYOUT_PRESETS: LayoutPreset[] = [
+  {
+    id: 'gameplay',
+    name: 'Gameplay only',
+    description: 'One centred crop filling the frame',
+    build: () => [
+      {
+        id: rid(),
+        label: 'Gameplay',
+        src: { x: 0.28, y: 0, w: 0.44, h: 1 },
+        dst: { x: 0, y: 0, w: 1, h: 1 }
+      }
+    ]
+  },
+  {
+    id: 'cam-top',
+    name: 'Camera + gameplay',
+    description: 'Facecam across the top, gameplay below',
+    build: () => [
+      {
+        id: rid(),
+        label: 'Camera',
+        src: { x: 0.02, y: 0.56, w: 0.26, h: 0.4 },
+        dst: { x: 0, y: 0, w: 1, h: 0.34 }
+      },
+      {
+        id: rid(),
+        label: 'Gameplay',
+        src: { x: 0.3, y: 0.06, w: 0.4, h: 0.88 },
+        dst: { x: 0, y: 0.34, w: 1, h: 0.66 }
+      }
+    ]
+  },
+  {
+    id: 'cam-gameplay-map',
+    name: 'Camera + gameplay + minimap',
+    description: 'Adds a corner box for the minimap or kill feed',
+    build: () => [
+      {
+        id: rid(),
+        label: 'Camera',
+        src: { x: 0.02, y: 0.56, w: 0.26, h: 0.4 },
+        dst: { x: 0, y: 0, w: 1, h: 0.3 }
+      },
+      {
+        id: rid(),
+        label: 'Gameplay',
+        src: { x: 0.3, y: 0.06, w: 0.4, h: 0.88 },
+        dst: { x: 0, y: 0.3, w: 1, h: 0.52 }
+      },
+      {
+        id: rid(),
+        label: 'Minimap',
+        src: { x: 0.78, y: 0.04, w: 0.2, h: 0.26 },
+        dst: { x: 0.02, y: 0.83, w: 0.45, h: 0.15 }
+      }
+    ]
+  }
+]
+
+export function newRegion(label = 'Box'): Region {
+  return {
+    id: rid(),
+    label,
+    src: { x: 0.35, y: 0.35, w: 0.3, h: 0.3 },
+    dst: { x: 0.1, y: 0.4, w: 0.5, h: 0.2 }
+  }
+}
+
+export interface CompositeExportRequest {
+  inputPath: string
+  outputPath: string
+  startSec: number
+  endSec: number
+  regions: Region[]
+  /** Source pixel dimensions, needed to turn normalised crops into pixels. */
+  srcWidth: number
+  srcHeight: number
+  canvas: { w: number; h: number }
+}
+
 export interface ExportRequest {
   inputPath: string
   outputPath: string

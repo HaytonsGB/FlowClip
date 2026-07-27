@@ -5,7 +5,8 @@ import type {
   ExportRequest,
   ExportResult,
   ExportProgress,
-  ToolStatus
+  ToolStatus,
+  CompositeExportRequest
 } from '../shared/types'
 
 /** The only surface the renderer gets — no raw Node access in the UI. */
@@ -21,6 +22,8 @@ const api = {
   saveClipDialog: (suggestedName: string): Promise<string | null> =>
     ipcRenderer.invoke('dialog:saveClip', suggestedName),
   exportClip: (req: ExportRequest): Promise<ExportResult> => ipcRenderer.invoke('clip:export', req),
+  exportComposite: (req: CompositeExportRequest): Promise<ExportResult> =>
+    ipcRenderer.invoke('clip:exportComposite', req),
   revealFile: (filePath: string): Promise<void> => ipcRenderer.invoke('shell:revealFile', filePath),
 
   /** Electron 33 removed File.path; this is the supported replacement. */
