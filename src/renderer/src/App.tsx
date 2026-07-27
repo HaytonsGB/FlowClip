@@ -9,6 +9,7 @@ import type {
 import {
   ASPECT_DIMS,
   LAYOUT_PRESETS,
+  centeredSrc,
   mediaUrl,
   newRegion
 } from '../../shared/types'
@@ -60,6 +61,7 @@ function App(): JSX.Element {
   const [tool, setTool] = useState<ToolId>('trim')
   const [regions, setRegions] = useState<Region[]>([])
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null)
+  const [activePreset, setActivePreset] = useState<string | null>(null)
   /** Bumped on any region edit so the paused canvas preview repaints. */
   const [revision, setRevision] = useState(0)
   const pictureRef = useRef<HTMLDivElement>(null)
@@ -108,6 +110,7 @@ function App(): JSX.Element {
       const initial = LAYOUT_PRESETS[0].build()
       setRegions(initial)
       setSelectedRegion(initial[0]?.id ?? null)
+      setActivePreset(LAYOUT_PRESETS[0].id)
       setRevision((n) => n + 1)
       // Thumbnails are a nicety. Isolated in its own try because a missing
       // bridge method throws synchronously and would otherwise surface as an
@@ -233,18 +236,47 @@ function App(): JSX.Element {
   const outBox = useFit(outPaneRef, canvasDims ? canvasDims.w / canvasDims.h : 1)
 
   const updateRegion = useCallback((id: string, patch: Partial<Region>) => {
-    setRegions((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)))
+    setRegions((rs) =>
+      rs.map((r) =>
+        r.id === id
+          ? // Dragging the source by hand means it is no longer auto-centred.
+            { ...r, ...patch, ...(patch.src ? { auto: false } : {}) }
+          : r
+      )
+    )
     setRevision((n) => n + 1)
   }, [])
 
-  const applyPreset = useCallback((presetId: string) => {
-    const preset = LAYOUT_PRESETS.find((p) => p.id === presetId)
-    if (!preset) return
-    const next = preset.build()
-    setRegions(next)
-    setSelectedRegion(next[0]?.id ?? null)
+  /** Resolve any auto-centred boxes against the real source and canvas sizes. */
+  const centreAuto = useCallback(
+    (rs: Region[], m: VideoMeta | null, canvas: { w: number; h: number } | null): Region[] => {
+      if (!m || !canvas) return rs
+      return rs.map((r) =>
+        r.auto ? { ...r, src: centeredSrc(m.width, m.height, r.dst, canvas.w, canvas.h) } : r
+      )
+    },
+    []
+  )
+
+  const applyPreset = useCallback(
+    (presetId: string) => {
+      const preset = LAYOUT_PRESETS.find((p) => p.id === presetId)
+      if (!preset) return
+      const next = centreAuto(preset.build(), meta, canvasDims)
+      setRegions(next)
+      setSelectedRegion(next[0]?.id ?? null)
+      setActivePreset(presetId)
+      setRevision((n) => n + 1)
+    },
+    [centreAuto, meta, canvasDims]
+  )
+
+  // Switching canvas changes the correct centred crop, so re-solve auto boxes.
+  useEffect(() => {
+    if (!meta || !canvasDims) return
+    setRegions((rs) => centreAuto(rs, meta, canvasDims))
     setRevision((n) => n + 1)
-  }, [])
+  }, [meta, canvasDims?.w, canvasDims?.h, centreAuto])
 
   /** Where the picture actually sits inside the element after letterboxing. */
   const pictureBox = useMemo(() => {
@@ -445,16 +477,20 @@ function App(): JSX.Element {
                 }}
                 regions={regions}
                 selectedId={selectedRegion}
+                activePreset={activePreset}
                 onSelectRegion={setSelectedRegion}
                 onApplyPreset={applyPreset}
                 onAddRegion={() => {
                   const r = newRegion(`Box ${regions.length + 1}`)
                   setRegions((rs) => [...rs, r])
                   setSelectedRegion(r.id)
+                  // The layout no longer matches any preset.
+                  setActivePreset(null)
                   setRevision((n) => n + 1)
                 }}
                 onRemoveRegion={(id) => {
                   setRegions((rs) => rs.filter((r) => r.id !== id))
+                  setActivePreset(null)
                   setRevision((n) => n + 1)
                 }}
               />

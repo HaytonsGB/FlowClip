@@ -41,6 +41,36 @@ export interface Region {
   label: string
   src: Rect
   dst: Rect
+  /**
+   * Keep `src` locked to the centred crop that exactly fills `dst`. Set on
+   * gameplay boxes so the main action never needs to be eyeballed, and cleared
+   * as soon as the user drags that box themselves.
+   */
+  auto?: boolean
+}
+
+/**
+ * The centred source crop whose aspect matches a destination slot — the largest
+ * rectangle that fills the slot without distortion. Same maths ffmpeg applies
+ * with scale-to-cover plus centre crop.
+ */
+export function centeredSrc(
+  srcWidth: number,
+  srcHeight: number,
+  dst: Rect,
+  canvasW: number,
+  canvasH: number
+): Rect {
+  const dstAspect = (dst.w * canvasW) / (dst.h * canvasH)
+  const srcAspect = srcWidth / srcHeight
+  if (!Number.isFinite(dstAspect) || dstAspect <= 0) return { x: 0, y: 0, w: 1, h: 1 }
+
+  if (dstAspect < srcAspect) {
+    const w = dstAspect / srcAspect
+    return { x: (1 - w) / 2, y: 0, w, h: 1 }
+  }
+  const h = srcAspect / dstAspect
+  return { x: 0, y: (1 - h) / 2, w: 1, h }
 }
 
 export interface LayoutPreset {
@@ -64,6 +94,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
       {
         id: rid(),
         label: 'Gameplay',
+        auto: true,
         src: { x: 0.28, y: 0, w: 0.44, h: 1 },
         dst: { x: 0, y: 0, w: 1, h: 1 }
       }
@@ -83,6 +114,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
       {
         id: rid(),
         label: 'Gameplay',
+        auto: true,
         src: { x: 0.3, y: 0.06, w: 0.4, h: 0.88 },
         dst: { x: 0, y: 0.34, w: 1, h: 0.66 }
       }
@@ -102,6 +134,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
       {
         id: rid(),
         label: 'Gameplay',
+        auto: true,
         src: { x: 0.3, y: 0.06, w: 0.4, h: 0.88 },
         dst: { x: 0, y: 0.3, w: 1, h: 0.52 }
       },

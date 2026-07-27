@@ -43,6 +43,7 @@ interface Props {
   onReset: () => void
   regions: Region[]
   selectedId: string | null
+  activePreset: string | null
   onSelectRegion: (id: string) => void
   onApplyPreset: (id: string) => void
   onAddRegion: () => void
@@ -58,6 +59,7 @@ export function ToolPanel({
   onReset,
   regions,
   selectedId,
+  activePreset,
   onSelectRegion,
   onApplyPreset,
   onAddRegion,
@@ -106,7 +108,7 @@ export function ToolPanel({
             {LAYOUT_PRESETS.map((p) => (
               <button
                 key={p.id}
-                className="chip"
+                className={`chip ${activePreset === p.id ? 'active' : ''}`}
                 onClick={() => onApplyPreset(p.id)}
                 title={p.description}
               >
