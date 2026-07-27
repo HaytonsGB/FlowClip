@@ -59,10 +59,31 @@ async function main() {
   }
 
   prune()
+  await fetchVadModel()
 
   const files = readdirSync(outDir)
   const total = files.reduce((n, f) => n + statSync(join(outDir, f)).size, 0)
   console.log(`\nDone — ${files.length} files, ${(total / 1024 / 1024).toFixed(1)} MB`)
+}
+
+/**
+ * Silero VAD. Small enough to bundle, and it is what stops whisper spreading
+ * word timestamps across silence — without it a clip with a few seconds of quiet
+ * at the front reports its first word at 0ms.
+ */
+async function fetchVadModel() {
+  const VAD_URL =
+    'https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v5.1.2.bin'
+  const out = join(outDir, 'ggml-silero-v5.1.2.bin')
+  if (existsSync(out)) {
+    console.log('  VAD model already present')
+    return
+  }
+  console.log('Downloading Silero VAD model…')
+  const res = await fetch(VAD_URL, { redirect: 'follow' })
+  if (!res.ok) throw new Error(`VAD download failed: HTTP ${res.status}`)
+  await pipeline(res.body, createWriteStream(out))
+  console.log('  VAD model installed')
 }
 
 /**
@@ -79,6 +100,7 @@ function prune() {
     'whisper.dll',
     'ggml.dll',
     'ggml-base.dll',
+    'ggml-silero-v5.1.2.bin',
     // Runtime-dispatched per CPU generation; ship them all so the build is
     // portable across machines.
     ...files.filter((f) => /^ggml-cpu-.*\.dll$/i.test(f))

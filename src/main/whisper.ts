@@ -27,6 +27,12 @@ export function whisperPath(): string | null {
   return existsSync(exe) ? exe : null
 }
 
+/** Silero VAD, bundled at under a megabyte. See the note in transcribe(). */
+function vadModelPath(): string | null {
+  const p = join(whisperDir(), 'ggml-silero-v5.1.2.bin')
+  return existsSync(p) ? p : null
+}
+
 function modelsDir(): string {
   const dir = join(app.getPath('userData'), 'models')
   mkdirSync(dir, { recursive: true })
@@ -169,6 +175,13 @@ export async function transcribe(
     '-of', outBase,
     '--no-prints'
   ]
+
+  // Whisper spreads token timestamps across silence: given 3.5s of quiet before
+  // speech, it reported the first word at 0ms. VAD finds the real speech regions
+  // first, which put that same word at 3840ms. Without it, captions appear
+  // seconds before anyone is talking.
+  const vad = vadModelPath()
+  if (vad) args.push('--vad', '-vm', vad)
 
   await new Promise<void>((resolve, reject) => {
     const proc = spawn(exe, args)
