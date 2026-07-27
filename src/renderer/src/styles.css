@@ -256,10 +256,39 @@ body {
 }
 
 /* ---------- trim bar ---------- */
+/* ---------- time ruler ---------- */
+.ruler {
+  position: relative;
+  height: 15px;
+  margin-bottom: 3px;
+}
+
+.ruler-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 10.5px;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ruler-tick::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 13px;
+  width: 1px;
+  height: 4px;
+  background: var(--line);
+}
+
 .trimbar-track {
   position: relative;
-  height: 46px;
-  background: var(--panel-2);
+  height: 56px;
+  background-color: var(--panel-2);
+  background-size: 100% 100%;
+  background-repeat: no-repeat;
   border: 1px solid var(--line);
   border-radius: 8px;
   cursor: pointer;
@@ -279,11 +308,29 @@ body {
   bottom: 0;
   background: linear-gradient(
     180deg,
-    rgba(77, 224, 196, 0.16),
-    rgba(124, 140, 255, 0.16)
+    rgba(77, 224, 196, 0.14),
+    rgba(124, 140, 255, 0.14)
   );
   border-top: 2px solid var(--accent);
   border-bottom: 2px solid var(--accent-2);
+  pointer-events: none;
+}
+
+/* Length of the selection, shown over the selection itself. */
+.selection-badge {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(5, 7, 10, 0.82);
+  border: 1px solid var(--accent);
+  color: var(--accent);
+  border-radius: 20px;
+  padding: 2px 10px;
+  font-size: 11.5px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .trimbar-playhead {
@@ -298,41 +345,76 @@ body {
 
 .trimbar-handle {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 12px;
-  margin-left: -6px;
+  top: -3px;
+  bottom: -3px;
+  width: 18px;
+  margin-left: -9px;
   background: var(--accent);
-  border-radius: 3px;
+  border-radius: 5px;
   cursor: ew-resize;
   touch-action: none;
+  display: grid;
+  place-items: center;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+  transition: filter 0.12s, width 0.12s;
+}
+
+.trimbar-handle:hover,
+.trimbar-handle:focus-visible {
+  filter: brightness(1.15);
+  width: 22px;
+  margin-left: -11px;
 }
 
 .trimbar-handle.out {
   background: var(--accent-2);
 }
 
-.trimbar-handle::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-left: 1px solid rgba(0, 0, 0, 0.35);
-  border-right: 1px solid rgba(0, 0, 0, 0.35);
-  margin: 16px 4px;
+/* Three lines — the standard "you can drag this" affordance. */
+.grip {
+  width: 8px;
+  height: 18px;
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(5, 7, 10, 0.75) 0 1.5px,
+    transparent 1.5px 3.5px
+  );
 }
 
 .trimbar-labels {
   display: flex;
   justify-content: space-between;
-  margin-top: 7px;
+  margin-top: 8px;
   font-size: 12px;
   color: var(--dim);
   font-variant-numeric: tabular-nums;
 }
 
+.trimbar-labels b {
+  color: var(--text);
+  font-weight: 620;
+}
+
 .trimbar-length {
   color: var(--accent);
   font-weight: 620;
+}
+
+/* ---------- mark buttons ---------- */
+.mark-group {
+  display: flex;
+  gap: 6px;
+  margin-left: 6px;
+}
+
+.btn.small {
+  padding: 5px 11px;
+  font-size: 12px;
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--dim);
 }
 
 /* ---------- aspect picker ---------- */

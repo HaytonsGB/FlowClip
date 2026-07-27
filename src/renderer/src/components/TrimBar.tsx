@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { clamp, formatTime } from '../lib/format'
 
 interface Props {
@@ -6,6 +6,8 @@ interface Props {
   current: number
   inSec: number
   outSec: number
+  /** flowclip:// URL of the tiled filmstrip, once ffmpeg has rendered it. */
+  stripUrl: string
   onSeek: (sec: number) => void
   onChangeIn: (sec: number) => void
   onChangeOut: (sec: number) => void
@@ -13,17 +15,32 @@ interface Props {
 
 type Handle = 'in' | 'out' | 'playhead'
 
+/** Roughly one label per 90px, snapped to a sensible interval. */
+function tickStep(duration: number): number {
+  const targets = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600]
+  return targets.find((t) => duration / t <= 12) ?? 900
+}
+
 /** Scrub track with draggable in/out handles. Everything is % of duration. */
 export function TrimBar({
   duration,
   current,
   inSec,
   outSec,
+  stripUrl,
   onSeek,
   onChangeIn,
   onChangeOut
 }: Props): JSX.Element {
   const trackRef = useRef<HTMLDivElement>(null)
+
+  const ticks = useMemo(() => {
+    if (duration <= 0) return []
+    const step = tickStep(duration)
+    const out: number[] = []
+    for (let t = 0; t <= duration; t += step) out.push(t)
+    return out
+  }, [duration])
 
   const secAtClientX = useCallback(
     (clientX: number): number => {
@@ -62,9 +79,18 @@ export function TrimBar({
 
   return (
     <div className="trimbar">
+      <div className="ruler">
+        {ticks.map((t) => (
+          <span key={t} className="ruler-tick" style={{ left: pct(t) }}>
+            {formatTime(t).replace(/\.\d$/, '')}
+          </span>
+        ))}
+      </div>
+
       <div
         className="trimbar-track"
         ref={trackRef}
+        style={stripUrl ? { backgroundImage: `url("${stripUrl}")` } : undefined}
         onPointerDown={(e) => onSeek(secAtClientX(e.clientX))}
       >
         <div className="trimbar-dim" style={{ left: 0, width: pct(inSec) }} />
@@ -72,8 +98,11 @@ export function TrimBar({
         <div
           className="trimbar-selection"
           style={{ left: pct(inSec), width: pct(outSec - inSec) }}
-        />
+        >
+          <span className="selection-badge">{formatTime(outSec - inSec)}</span>
+        </div>
         <div className="trimbar-playhead" style={{ left: pct(current) }} />
+
         <div
           className="trimbar-handle in"
           style={{ left: pct(inSec) }}
@@ -81,8 +110,11 @@ export function TrimBar({
           role="slider"
           aria-label="Clip start"
           aria-valuenow={inSec}
+          title="Drag to set where the clip starts"
           tabIndex={0}
-        />
+        >
+          <span className="grip" />
+        </div>
         <div
           className="trimbar-handle out"
           style={{ left: pct(outSec) }}
@@ -90,13 +122,21 @@ export function TrimBar({
           role="slider"
           aria-label="Clip end"
           aria-valuenow={outSec}
+          title="Drag to set where the clip ends"
           tabIndex={0}
-        />
+        >
+          <span className="grip" />
+        </div>
       </div>
+
       <div className="trimbar-labels">
-        <span>In {formatTime(inSec)}</span>
-        <span className="trimbar-length">Clip {formatTime(outSec - inSec)}</span>
-        <span>Out {formatTime(outSec)}</span>
+        <span>
+          Start <b>{formatTime(inSec)}</b>
+        </span>
+        <span className="trimbar-length">Clip length {formatTime(outSec - inSec)}</span>
+        <span>
+          End <b>{formatTime(outSec)}</b>
+        </span>
       </div>
     </div>
   )

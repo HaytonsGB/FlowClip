@@ -5,7 +5,8 @@
  * Shipping our own means a user never has to install ffmpeg themselves.
  */
 import { spawn, execFile } from 'child_process'
-import { existsSync } from 'fs'
+import { existsSync, mkdirSync, statSync } from 'fs'
+import { createHash } from 'crypto'
 import { join } from 'path'
 import { app } from 'electron'
 import type { VideoMeta, ExportRequest, ExportProgress, ToolStatus } from '../shared/types'
@@ -84,6 +85,55 @@ function parseFps(rate: string | undefined): number {
   const [num, den] = rate.split('/').map(Number)
   if (!den) return num || 0
   return Math.round((num / den) * 100) / 100
+}
+
+/**
+ * Renders evenly-spaced frames tiled into one wide strip, used as the timeline
+ * background so the track shows the actual footage. Cached per file so
+ * reopening a clip is instant.
+ */
+export async function filmstrip(
+  inputPath: string,
+  durationSec: number,
+  count = 24,
+  height = 56
+): Promise<string> {
+  const { ffmpegPath } = toolStatus()
+  if (!ffmpegPath) throw new Error('ffmpeg not found')
+  if (durationSec <= 0) throw new Error('Cannot build a filmstrip for a zero-length video')
+
+  const outDir = join(app.getPath('temp'), 'flowclip-strips')
+  mkdirSync(outDir, { recursive: true })
+
+  const stat = statSync(inputPath)
+  const key = createHash('sha1')
+    .update(`${inputPath}:${stat.size}:${stat.mtimeMs}:${count}:${height}`)
+    .digest('hex')
+    .slice(0, 16)
+  const outPath = join(outDir, `${key}.jpg`)
+  if (existsSync(outPath)) return outPath
+
+  // fps picks `count` frames across the whole clip; tile glues them side by side.
+  const fps = count / durationSec
+  const args = [
+    '-hide_banner',
+    '-loglevel', 'error',
+    '-y',
+    '-i', inputPath,
+    '-vf', `fps=${fps.toFixed(6)},scale=-1:${height},tile=${count}x1`,
+    '-frames:v', '1',
+    '-q:v', '4',
+    outPath
+  ]
+
+  await new Promise<void>((resolve, reject) => {
+    execFile(ffmpegPath, args, (err, _stdout, stderr) => {
+      if (err) reject(new Error(stderr || err.message))
+      else resolve()
+    })
+  })
+
+  return outPath
 }
 
 /**

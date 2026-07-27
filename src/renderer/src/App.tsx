@@ -45,6 +45,7 @@ function App(): JSX.Element {
   const [aspect, setAspect] = useState<AspectPreset>('vertical')
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const [videoBox, setVideoBox] = useState<{ w: number; h: number } | null>(null)
+  const [stripUrl, setStripUrl] = useState('')
 
   /** Element box. The picture inside it is letterboxed by object-fit: contain. */
   useEffect(() => {
@@ -79,6 +80,12 @@ function App(): JSX.Element {
       setOutSec(m.durationSec)
       setCurrent(0)
       setStatus({ kind: 'idle' })
+      setStripUrl('')
+      // Thumbnails are a nicety — a failure here must not block editing.
+      window.api
+        .filmstrip(filePath, m.durationSec)
+        .then((strip) => setStripUrl(mediaUrl(strip)))
+        .catch(() => setStripUrl(''))
     } catch (err) {
       setStatus({ kind: 'error', message: err instanceof Error ? err.message : String(err) })
     }
@@ -266,6 +273,34 @@ function App(): JSX.Element {
               <span className="time">
                 {formatTime(current)} <span className="dim">/ {formatTime(meta.durationSec)}</span>
               </span>
+
+              <span className="mark-group">
+                <button
+                  className="btn small"
+                  onClick={() => setInSec(clamp(current, 0, outSec - 0.1))}
+                  title="Start the clip at the playhead (I)"
+                >
+                  ⇥ Set start
+                </button>
+                <button
+                  className="btn small"
+                  onClick={() => setOutSec(clamp(current, inSec + 0.1, meta.durationSec))}
+                  title="End the clip at the playhead (O)"
+                >
+                  Set end ⇤
+                </button>
+                <button
+                  className="btn small ghost"
+                  onClick={() => {
+                    setInSec(0)
+                    setOutSec(meta.durationSec)
+                  }}
+                  title="Select the whole video again"
+                >
+                  Reset
+                </button>
+              </span>
+
               <span className="spacer" />
               <span className="meta-chip">
                 {meta.width}×{meta.height}
@@ -279,6 +314,7 @@ function App(): JSX.Element {
               current={current}
               inSec={inSec}
               outSec={outSec}
+              stripUrl={stripUrl}
               onSeek={seek}
               onChangeIn={setInSec}
               onChangeOut={setOutSec}

@@ -2,7 +2,7 @@ import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net } from 'elect
 import { join, basename, extname, dirname } from 'path'
 import { pathToFileURL } from 'url'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import { probe, runExport, toolStatus, rescanTools } from './ffmpeg'
+import { probe, runExport, toolStatus, rescanTools, filmstrip } from './ffmpeg'
 import { MEDIA_SCHEME } from '../shared/types'
 import type { ExportRequest, ExportResult } from '../shared/types'
 
@@ -104,6 +104,10 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('video:probe', async (_e, filePath: string) => probe(filePath))
+
+  ipcMain.handle('video:filmstrip', async (_e, filePath: string, durationSec: number) =>
+    filmstrip(filePath, durationSec)
+  )
 
   ipcMain.handle('dialog:saveClip', async (_e, suggestedName: string) => {
     const result = await dialog.showSaveDialog({

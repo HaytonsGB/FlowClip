@@ -14,6 +14,8 @@ const api = {
   rescanTools: (): Promise<ToolStatus> => ipcRenderer.invoke('tools:rescan'),
   openVideo: (): Promise<string | null> => ipcRenderer.invoke('dialog:openVideo'),
   probe: (filePath: string): Promise<VideoMeta> => ipcRenderer.invoke('video:probe', filePath),
+  filmstrip: (filePath: string, durationSec: number): Promise<string> =>
+    ipcRenderer.invoke('video:filmstrip', filePath, durationSec),
   suggestOutput: (inputPath: string): Promise<string> =>
     ipcRenderer.invoke('path:suggestOutput', inputPath),
   saveClipDialog: (suggestedName: string): Promise<string | null> =>
