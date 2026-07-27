@@ -18,6 +18,7 @@ import type {
   Rect
 } from '../shared/types'
 import { ASPECT_DIMS } from '../shared/types'
+import { writeAss, escapeFilterPath } from './captions'
 
 const EXE = process.platform === 'win32' ? '.exe' : ''
 
@@ -154,10 +155,11 @@ function reframeFilter(aspect: ExportRequest['aspect']): string | null {
   return `scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},setsar=1`
 }
 
-export function buildExportArgs(req: ExportRequest): string[] {
+export function buildExportArgs(req: ExportRequest, srcSize?: { w: number; h: number }): string[] {
   const duration = Math.max(0.05, req.endSec - req.startSec)
   const filter = reframeFilter(req.aspect)
-  const mustEncode = req.reencode || filter !== null
+  const hasCaptions = Boolean(req.captions && req.captions.words.length > 0)
+  const mustEncode = req.reencode || filter !== null || hasCaptions
 
   const args: string[] = ['-hide_banner', '-y']
 
@@ -165,7 +167,17 @@ export function buildExportArgs(req: ExportRequest): string[] {
   args.push('-ss', req.startSec.toFixed(3), '-i', req.inputPath, '-t', duration.toFixed(3))
 
   if (mustEncode) {
-    if (filter) args.push('-vf', filter)
+    const chain: string[] = []
+    if (filter) chain.push(filter)
+    if (hasCaptions && req.captions) {
+      // Caption sizes are relative to the frame, so the track is laid out
+      // against whatever the output ends up being.
+      const canvas =
+        req.aspect === 'source' ? (srcSize ?? { w: 1080, h: 1920 }) : ASPECT_DIMS[req.aspect]
+      const assPath = writeAss(req.captions.words, req.captions.style, canvas, req.startSec)
+      chain.push(`subtitles='${escapeFilterPath(assPath)}'`)
+    }
+    if (chain.length) args.push('-vf', chain.join(','))
     args.push(
       '-c:v', 'libx264',
       '-preset', 'veryfast',
@@ -330,7 +342,13 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
     steps.push(`${base}[r${i}]overlay=${d.x}:${d.y}[o${i}]`)
   })
 
-  const finalLabel = `[o${regions.length - 1}]`
+  let finalLabel = `[o${regions.length - 1}]`
+
+  if (req.captions && req.captions.words.length > 0) {
+    const assPath = writeAss(req.captions.words, req.captions.style, canvas, req.startSec)
+    steps.push(`${finalLabel}subtitles='${escapeFilterPath(assPath)}'[cap]`)
+    finalLabel = '[cap]'
+  }
   // -loop keeps each still mask supplying frames for the whole clip.
   const maskArgs = maskInputs.flatMap((p) => ['-loop', '1', '-i', p])
 
@@ -371,10 +389,11 @@ function parseProgress(chunk: string, totalSec: number): ExportProgress | null {
 
 export function runExport(
   req: ExportRequest,
-  onProgress: (p: ExportProgress) => void
+  onProgress: (p: ExportProgress) => void,
+  srcSize?: { w: number; h: number }
 ): Promise<void> {
   return runFfmpeg(
-    buildExportArgs(req),
+    buildExportArgs(req, srcSize),
     Math.max(0.05, req.endSec - req.startSec),
     onProgress
   )

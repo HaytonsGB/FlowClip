@@ -290,11 +290,91 @@ export const WHISPER_MODELS: Record<WhisperModelId, WhisperModelMeta> = {
   }
 }
 
+export type CaptionPreset = 'pop' | 'clean' | 'bold' | 'karaoke'
+
+export interface CaptionStyle {
+  preset: CaptionPreset
+  /** Font family resolved from the system by libass. */
+  font: string
+  /** Cap height as a fraction of the canvas height. */
+  size: number
+  /** #rrggbb */
+  colour: string
+  /** #rrggbb applied to the word currently being spoken. */
+  highlight: string
+  outline: number
+  /** Vertical placement, 0 = top, 1 = bottom. */
+  position: number
+  uppercase: boolean
+  /** Words shown together on a line. 1 gives the one-word-at-a-time look. */
+  wordsPerLine: number
+}
+
+export const CAPTION_PRESETS: Record<CaptionPreset, Omit<CaptionStyle, 'preset'>> = {
+  pop: {
+    font: 'Arial Black',
+    size: 0.062,
+    colour: '#ffffff',
+    highlight: '#22e0f0',
+    outline: 4,
+    position: 0.72,
+    uppercase: true,
+    wordsPerLine: 3
+  },
+  clean: {
+    font: 'Segoe UI',
+    size: 0.045,
+    colour: '#ffffff',
+    highlight: '#ffffff',
+    outline: 3,
+    position: 0.82,
+    uppercase: false,
+    wordsPerLine: 5
+  },
+  bold: {
+    font: 'Impact',
+    size: 0.085,
+    colour: '#ffffff',
+    highlight: '#ffe14d',
+    outline: 5,
+    position: 0.5,
+    uppercase: true,
+    wordsPerLine: 1
+  },
+  karaoke: {
+    font: 'Arial Black',
+    size: 0.055,
+    colour: '#ffffff',
+    highlight: '#f472e6',
+    outline: 4,
+    position: 0.76,
+    uppercase: true,
+    wordsPerLine: 4
+  }
+}
+
+export const CAPTION_PRESET_LABELS: Record<CaptionPreset, string> = {
+  pop: 'Pop',
+  clean: 'Clean',
+  bold: 'Big & bold',
+  karaoke: 'Karaoke'
+}
+
+export function defaultCaptionStyle(preset: CaptionPreset = 'pop'): CaptionStyle {
+  return { preset, ...CAPTION_PRESETS[preset] }
+}
+
 export interface ModelProgress {
   received: number
   total: number
   /** 0..1 */
   percent: number
+}
+
+/** Burned-in caption track. Absent means no captions on this export. */
+export interface CaptionTrack {
+  words: CaptionWord[]
+  style: CaptionStyle
 }
 
 export interface CompositeExportRequest {
@@ -303,6 +383,7 @@ export interface CompositeExportRequest {
   startSec: number
   endSec: number
   regions: Region[]
+  captions?: CaptionTrack
   /** Source pixel dimensions, needed to turn normalised crops into pixels. */
   srcWidth: number
   srcHeight: number
@@ -317,6 +398,8 @@ export interface ExportRequest {
   aspect: AspectPreset
   /** Re-encode instead of stream-copy. Required for any reframing. */
   reencode: boolean
+  /** Burning captions forces a re-encode even on an otherwise plain trim. */
+  captions?: CaptionTrack
 }
 
 export interface ExportProgress {

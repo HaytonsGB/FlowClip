@@ -6,7 +6,10 @@ import type {
   ExportResult,
   ExportProgress,
   ToolStatus,
-  CompositeExportRequest
+  CompositeExportRequest,
+  WhisperModelId,
+  CaptionWord,
+  ModelProgress
 } from '../shared/types'
 
 /** The only surface the renderer gets — no raw Node access in the UI. */
@@ -28,6 +31,31 @@ const api = {
 
   /** Electron 33 removed File.path; this is the supported replacement. */
   pathForFile: (file: File): string => webUtils.getPathForFile(file),
+
+  whisperStatus: (
+    modelId: WhisperModelId
+  ): Promise<{ binaryReady: boolean; modelReady: boolean }> =>
+    ipcRenderer.invoke('whisper:status', modelId),
+  downloadModel: (modelId: WhisperModelId): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke('whisper:downloadModel', modelId),
+  transcribe: (req: {
+    inputPath: string
+    startSec: number
+    endSec: number
+    modelId: WhisperModelId
+  }): Promise<{ ok: boolean; words?: CaptionWord[]; error?: string }> =>
+    ipcRenderer.invoke('whisper:transcribe', req),
+
+  onModelProgress: (cb: (p: ModelProgress) => void): (() => void) => {
+    const listener = (_e: unknown, p: ModelProgress): void => cb(p)
+    ipcRenderer.on('whisper:modelProgress', listener)
+    return () => ipcRenderer.removeListener('whisper:modelProgress', listener)
+  },
+  onTranscribeStage: (cb: (stage: string) => void): (() => void) => {
+    const listener = (_e: unknown, s: string): void => cb(s)
+    ipcRenderer.on('whisper:stage', listener)
+    return () => ipcRenderer.removeListener('whisper:stage', listener)
+  },
 
   /** Returns an unsubscribe fn so React effects can clean up. */
   onExportProgress: (cb: (p: ExportProgress) => void): (() => void) => {

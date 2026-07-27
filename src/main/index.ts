@@ -10,8 +10,14 @@ import {
   rescanTools,
   filmstrip
 } from './ffmpeg'
+import { transcribe, downloadModel, isModelReady, whisperPath } from './whisper'
 import { MEDIA_SCHEME } from '../shared/types'
-import type { ExportRequest, ExportResult, CompositeExportRequest } from '../shared/types'
+import type {
+  ExportRequest,
+  ExportResult,
+  CompositeExportRequest,
+  WhisperModelId
+} from '../shared/types'
 
 const VIDEO_EXTS = ['mp4', 'mov', 'mkv', 'avi', 'webm', 'm4v', 'flv', 'wmv']
 
@@ -154,6 +160,45 @@ function registerIpc(): void {
           if (!event.sender.isDestroyed()) event.sender.send('clip:progress', p)
         })
         return { ok: true, outputPath: req.outputPath }
+      } catch (err) {
+        return { ok: false, error: err instanceof Error ? err.message : String(err) }
+      }
+    }
+  )
+
+  ipcMain.handle('whisper:status', (_e, modelId: WhisperModelId) => ({
+    binaryReady: whisperPath() !== null,
+    modelReady: isModelReady(modelId)
+  }))
+
+  ipcMain.handle('whisper:downloadModel', async (event, modelId: WhisperModelId) => {
+    try {
+      await downloadModel(modelId, (p) => {
+        if (!event.sender.isDestroyed()) event.sender.send('whisper:modelProgress', p)
+      })
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle(
+    'whisper:transcribe',
+    async (
+      event,
+      req: { inputPath: string; startSec: number; endSec: number; modelId: WhisperModelId }
+    ) => {
+      try {
+        const words = await transcribe(
+          req.inputPath,
+          req.startSec,
+          req.endSec,
+          req.modelId,
+          (stage) => {
+            if (!event.sender.isDestroyed()) event.sender.send('whisper:stage', stage)
+          }
+        )
+        return { ok: true, words }
       } catch (err) {
         return { ok: false, error: err instanceof Error ? err.message : String(err) }
       }

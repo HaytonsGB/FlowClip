@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
-import type { Region, Rect } from '../../../shared/types'
+import type { Region, Rect, CaptionWord, CaptionStyle } from '../../../shared/types'
+import { groupIntoLines } from '../../../shared/captions'
 
 interface Props {
   videoRef: React.RefObject<HTMLVideoElement>
@@ -7,6 +8,56 @@ interface Props {
   canvas: { w: number; h: number }
   /** Redraw trigger for paused edits, where rAF alone would show a stale frame. */
   revision: number
+  words?: CaptionWord[]
+  captionStyle?: CaptionStyle
+}
+
+/**
+ * Approximates the burned-in ASS track for the preview: the same line grouping
+ * and the same active-word highlight, so what plays here matches the export.
+ */
+function drawCaptions(
+  ctx: CanvasRenderingContext2D,
+  canvas: { w: number; h: number },
+  words: CaptionWord[],
+  style: CaptionStyle,
+  timeSec: number
+): void {
+  const index = words.findIndex((w) => timeSec >= w.start && timeSec < w.end)
+  if (index < 0) return
+
+  // Shared with the ASS writer so the preview groups exactly as the export does.
+  const group = groupIntoLines(words, style.wordsPerLine).find(
+    (g) => index >= g.offset && index < g.offset + g.words.length
+  )
+  if (!group) return
+  const lineStart = group.offset
+  const line = group.words
+
+  const fontSize = style.size * canvas.h
+  ctx.font = `900 ${fontSize}px "${style.font}", "Segoe UI", sans-serif`
+  ctx.textAlign = 'left'
+  ctx.textBaseline = 'middle'
+
+  const parts = line.map((w) => (style.uppercase ? w.text.toUpperCase() : w.text))
+  const space = ctx.measureText(' ').width
+  const widths = parts.map((p) => ctx.measureText(p).width)
+  const total = widths.reduce((a, b) => a + b, 0) + space * (parts.length - 1)
+
+  let x = (canvas.w - total) / 2
+  const y = (1 - style.position) * canvas.h
+
+  ctx.lineJoin = 'round'
+  ctx.lineWidth = style.outline * (canvas.h / 1920) * 4
+  ctx.strokeStyle = '#000000'
+
+  parts.forEach((part, i) => {
+    const active = lineStart + i === index
+    ctx.strokeText(part, x, y)
+    ctx.fillStyle = active ? style.highlight : style.colour
+    ctx.fillText(part, x, y)
+    x += widths[i] + space
+  })
 }
 
 /**
@@ -33,7 +84,14 @@ function coverCrop(src: Rect, srcW: number, srcH: number, dstAspect: number): nu
   return [sx, sy, sw, sh]
 }
 
-export function OutputPreview({ videoRef, regions, canvas, revision }: Props): JSX.Element {
+export function OutputPreview({
+  videoRef,
+  regions,
+  canvas,
+  revision,
+  words,
+  captionStyle
+}: Props): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
 
   useEffect(() => {
@@ -121,12 +179,17 @@ export function OutputPreview({ videoRef, regions, canvas, revision }: Props): J
           }
         }
       }
+
+      if (words?.length && captionStyle) {
+        drawCaptions(ctx, canvas, words, captionStyle, video.currentTime)
+      }
+
       raf = requestAnimationFrame(draw)
     }
 
     draw()
     return () => cancelAnimationFrame(raf)
-  }, [videoRef, regions, canvas.w, canvas.h, revision])
+  }, [videoRef, regions, canvas, canvas.w, canvas.h, revision, words, captionStyle])
 
   return <canvas ref={canvasRef} width={canvas.w} height={canvas.h} className="output-canvas" />
 }

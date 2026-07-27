@@ -6,15 +6,23 @@ import type {
   ToolStatus,
   Region,
   FitMode,
-  BackdropMode
+  BackdropMode,
+  CaptionWord,
+  CaptionStyle,
+  CaptionPreset,
+  WhisperModelId
 } from '../../shared/types'
 import {
   ASPECT_DIMS,
   LAYOUT_PRESETS,
   centeredSrc,
   mediaUrl,
-  newRegion
+  newRegion,
+  defaultCaptionStyle,
+  CAPTION_PRESETS
 } from '../../shared/types'
+import { CaptionsPanel, type CaptionJob } from './components/CaptionsPanel'
+import { retimeLine, replaceLine } from '../../shared/captions'
 import { RegionRect } from './components/RegionRect'
 import { LayersPanel } from './components/LayersPanel'
 import { OutputPreview } from './components/OutputPreview'
@@ -67,6 +75,11 @@ function App(): JSX.Element {
   const [activePreset, setActivePreset] = useState<string | null>(null)
   /** Set once the user arranges boxes themselves, which freezes the preset. */
   const [presetDirty, setPresetDirty] = useState(false)
+  const [words, setWords] = useState<CaptionWord[]>([])
+  const [capStyle, setCapStyle] = useState<CaptionStyle>(() => defaultCaptionStyle())
+  const [modelId, setModelId] = useState<WhisperModelId>('base.en')
+  const [modelReady, setModelReady] = useState(false)
+  const [capJob, setCapJob] = useState<CaptionJob>({ kind: 'idle' })
   /** Bumped on any region edit so the paused canvas preview repaints. */
   const [revision, setRevision] = useState(0)
   const pictureRef = useRef<HTMLDivElement>(null)
@@ -206,6 +219,8 @@ function App(): JSX.Element {
 
     // A canvas plus boxes means compositing; 'source' is a plain trim, which can
     // stream-copy and stays much faster.
+    const captions = words.length > 0 ? { words, style: capStyle } : undefined
+
     const result =
       canvasDims && regions.length > 0
         ? await window.api.exportComposite({
@@ -216,7 +231,8 @@ function App(): JSX.Element {
             regions,
             srcWidth: meta.width,
             srcHeight: meta.height,
-            canvas: canvasDims
+            canvas: canvasDims,
+            captions
           })
         : await window.api.exportClip({
             inputPath: meta.path,
@@ -224,12 +240,13 @@ function App(): JSX.Element {
             startSec: inSec,
             endSec: outSec,
             aspect,
-            reencode: false
+            reencode: false,
+            captions
           })
 
     if (result.ok && result.outputPath) setStatus({ kind: 'done', path: result.outputPath })
     else setStatus({ kind: 'error', message: result.error ?? 'Export failed' })
-  }, [meta, inSec, outSec, aspect, canvasDims, regions])
+  }, [meta, inSec, outSec, aspect, canvasDims, regions, words, capStyle])
 
   // Space toggles play, I/O set the trim points — the shortcuts editors expect.
   useEffect(() => {
@@ -327,6 +344,54 @@ function App(): JSX.Element {
     },
     [buildPreset, meta, canvasDims]
   )
+
+  useEffect(() => {
+    window.api.whisperStatus(modelId).then((s) => setModelReady(s.modelReady))
+  }, [modelId])
+
+  useEffect(() => window.api.onModelProgress((p) =>
+    setCapJob({ kind: 'downloading', percent: p.percent })
+  ), [])
+
+  useEffect(() => window.api.onTranscribeStage((stage) =>
+    setCapJob({ kind: 'working', stage })
+  ), [])
+
+  const runTranscribe = useCallback(async () => {
+    if (!meta) return
+    try {
+      const status = await window.api.whisperStatus(modelId)
+      if (!status.binaryReady) {
+        setCapJob({ kind: 'error', message: 'whisper.cpp is missing from this build.' })
+        return
+      }
+      if (!status.modelReady) {
+        setCapJob({ kind: 'downloading', percent: 0 })
+        const dl = await window.api.downloadModel(modelId)
+        if (!dl.ok) {
+          setCapJob({ kind: 'error', message: dl.error ?? 'Model download failed' })
+          return
+        }
+        setModelReady(true)
+      }
+
+      setCapJob({ kind: 'working', stage: 'Preparing' })
+      const res = await window.api.transcribe({
+        inputPath: meta.path,
+        startSec: inSec,
+        endSec: outSec,
+        modelId
+      })
+      if (res.ok && res.words) {
+        setWords(res.words)
+        setCapJob({ kind: 'idle' })
+      } else {
+        setCapJob({ kind: 'error', message: res.error ?? 'Transcription failed' })
+      }
+    } catch (err) {
+      setCapJob({ kind: 'error', message: err instanceof Error ? err.message : String(err) })
+    }
+  }, [meta, inSec, outSec, modelId])
 
   const addRegion = useCallback(() => {
     const r = newRegion(`Box ${regions.length + 1}`)
@@ -559,6 +624,8 @@ function App(): JSX.Element {
                     regions={regions}
                     canvas={canvasDims}
                     revision={revision}
+                    words={words}
+                    captionStyle={capStyle}
                   />
                   {regions.map((r) => (
                     <RegionRect
@@ -627,6 +694,33 @@ function App(): JSX.Element {
             />
 
             <div className="row">
+              {tool === 'captions' ? (
+                <CaptionsPanel
+                  words={words}
+                  style={capStyle}
+                  modelId={modelId}
+                  modelReady={modelReady}
+                  job={capJob}
+                  onModel={setModelId}
+                  onTranscribe={runTranscribe}
+                  onPreset={(p: CaptionPreset) =>
+                    setCapStyle({ preset: p, ...CAPTION_PRESETS[p] })
+                  }
+                  onStyle={(patch) => setCapStyle((s) => ({ ...s, ...patch }))}
+                  onEditWord={(i, text) =>
+                    setWords((ws) => ws.map((w, j) => (j === i ? { ...w, text } : w)))
+                  }
+                  onRemoveWord={(i) => setWords((ws) => ws.filter((_, j) => j !== i))}
+                  onEditLine={(line, text) =>
+                    setWords((ws) => replaceLine(ws, line, retimeLine(line, text)))
+                  }
+                  onSeek={seek}
+                  onClear={() => {
+                    setWords([])
+                    setCapJob({ kind: 'idle' })
+                  }}
+                />
+              ) : (
               <ToolPanel
                 tool={tool}
                 aspect={aspect}
@@ -640,6 +734,7 @@ function App(): JSX.Element {
                 activePreset={activePreset}
                 onApplyPreset={applyPreset}
               />
+              )}
               <button
                 className="btn primary export"
                 onClick={doExport}

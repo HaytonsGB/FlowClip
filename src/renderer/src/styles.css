@@ -1082,6 +1082,174 @@ body {
   box-shadow: 0 0 18px rgba(34, 224, 240, 0.24);
 }
 
+/* ---------- captions ---------- */
+.caption-status {
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.mini-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+
+.mini-field input[type='range'] {
+  width: 78px;
+  accent-color: var(--cyan);
+}
+
+.mini-field.colour input[type='color'] {
+  width: 26px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: none;
+  cursor: pointer;
+}
+
+/* ---------- transcript editing ---------- */
+.edit-mode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.edit-count {
+  font-size: 10.5px;
+  color: var(--dim);
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.transcript.lines {
+  flex-direction: column;
+  flex-wrap: nowrap;
+  gap: 5px;
+  max-height: 132px;
+}
+
+.caption-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.line-time {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--cyan);
+  font: inherit;
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  width: 46px;
+  text-align: right;
+}
+
+.line-time:hover {
+  background: rgba(34, 224, 240, 0.14);
+}
+
+.line-text {
+  flex: 1;
+  min-width: 0;
+  background: rgba(46, 56, 92, 0.45);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12.5px;
+  padding: 5px 9px;
+  outline: none;
+  transition: border-color 0.14s, box-shadow 0.14s;
+}
+
+.line-text:focus {
+  border-color: var(--cyan);
+  box-shadow: 0 0 12px rgba(34, 224, 240, 0.22);
+}
+
+.word-del.always {
+  opacity: 0.5;
+  flex-shrink: 0;
+}
+
+.word-del.always:hover {
+  opacity: 1;
+}
+
+/* Editable transcript — one chip per word, timings preserved. */
+.transcript {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-height: 86px;
+  overflow-y: auto;
+  padding: 7px;
+  background: rgba(20, 26, 46, 0.6);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.word-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  background: rgba(46, 56, 92, 0.45);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1px 3px 1px 6px;
+}
+
+.word-chip:focus-within {
+  border-color: var(--cyan);
+  box-shadow: 0 0 12px rgba(34, 224, 240, 0.25);
+}
+
+.word-chip input {
+  background: none;
+  border: none;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 2px 0;
+  min-width: 2ch;
+  outline: none;
+}
+
+.word-del {
+  display: grid;
+  place-items: center;
+  background: none;
+  border: none;
+  color: var(--dim);
+  cursor: pointer;
+  padding: 1px;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s;
+}
+
+.word-chip:hover .word-del,
+.word-chip:focus-within .word-del {
+  opacity: 1;
+}
+
+.word-del:hover {
+  color: var(--danger);
+}
+
 /* ---------- not-yet-built tools ---------- */
 .soon-card {
   border: 1px dashed rgba(157, 123, 255, 0.34);
