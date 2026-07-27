@@ -64,6 +64,8 @@ function App(): JSX.Element {
   const [regions, setRegions] = useState<Region[]>([])
   const [selectedRegion, setSelectedRegion] = useState<string | null>(null)
   const [activePreset, setActivePreset] = useState<string | null>(null)
+  /** Set once the user arranges boxes themselves, which freezes the preset. */
+  const [presetDirty, setPresetDirty] = useState(false)
   /** Bumped on any region edit so the paused canvas preview repaints. */
   const [revision, setRevision] = useState(0)
   const pictureRef = useRef<HTMLDivElement>(null)
@@ -109,10 +111,15 @@ function App(): JSX.Element {
       setStripUrl('')
       // Start on the single centred box — same result as a plain reframe, but
       // now it is an editable layout rather than a fixed crop.
-      const initial = LAYOUT_PRESETS[0].build()
+      const initial = LAYOUT_PRESETS[0].build({
+        srcAspect: m.height ? m.width / m.height : 16 / 9,
+        canvasW: 1080,
+        canvasH: 1920
+      })
       setRegions(initial)
       setSelectedRegion(initial[0]?.id ?? null)
       setActivePreset(LAYOUT_PRESETS[0].id)
+      setPresetDirty(false)
       setRevision((n) => n + 1)
       // Thumbnails are a nicety. Isolated in its own try because a missing
       // bridge method throws synchronously and would otherwise surface as an
@@ -246,6 +253,7 @@ function App(): JSX.Element {
           : r
       )
     )
+    setPresetDirty(true)
     setRevision((n) => n + 1)
   }, [])
 
@@ -260,17 +268,34 @@ function App(): JSX.Element {
     []
   )
 
+  const buildPreset = useCallback(
+    (presetId: string, m: VideoMeta | null, canvas: { w: number; h: number } | null) => {
+      const preset = LAYOUT_PRESETS.find((p) => p.id === presetId)
+      if (!preset || !m || !canvas || !m.height) return null
+      return centreAuto(
+        preset.build({
+          srcAspect: m.width / m.height,
+          canvasW: canvas.w,
+          canvasH: canvas.h
+        }),
+        m,
+        canvas
+      )
+    },
+    [centreAuto]
+  )
+
   const applyPreset = useCallback(
     (presetId: string) => {
-      const preset = LAYOUT_PRESETS.find((p) => p.id === presetId)
-      if (!preset) return
-      const next = centreAuto(preset.build(), meta, canvasDims)
+      const next = buildPreset(presetId, meta, canvasDims)
+      if (!next) return
       setRegions(next)
       setSelectedRegion(next[0]?.id ?? null)
       setActivePreset(presetId)
+      setPresetDirty(false)
       setRevision((n) => n + 1)
     },
-    [centreAuto, meta, canvasDims]
+    [buildPreset, meta, canvasDims]
   )
 
   const addRegion = useCallback(() => {
@@ -278,12 +303,14 @@ function App(): JSX.Element {
     setRegions((rs) => [...rs, r])
     setSelectedRegion(r.id)
     setActivePreset(null)
+    setPresetDirty(true)
     setRevision((n) => n + 1)
   }, [regions.length])
 
   const removeRegion = useCallback((id: string) => {
     setRegions((rs) => rs.filter((r) => r.id !== id))
     setActivePreset(null)
+    setPresetDirty(true)
     setRevision((n) => n + 1)
   }, [])
 
@@ -297,6 +324,7 @@ function App(): JSX.Element {
       ;[next[i], next[j]] = [next[j], next[i]]
       return next
     })
+    setPresetDirty(true)
     setRevision((n) => n + 1)
   }, [])
 
@@ -310,17 +338,34 @@ function App(): JSX.Element {
             : r
         )
       )
+      setPresetDirty(true)
       setRevision((n) => n + 1)
     },
     []
   )
 
-  // Switching canvas changes the correct centred crop, so re-solve auto boxes.
+  /**
+   * A layout that suits 9:16 is wrong on 16:9, so re-solve the preset whenever
+   * the canvas changes. Skipped once the user has moved anything themselves —
+   * their arrangement outranks the preset.
+   */
   useEffect(() => {
     if (!meta || !canvasDims) return
+    if (activePreset && !presetDirty) {
+      const next = buildPreset(activePreset, meta, canvasDims)
+      if (next) {
+        setRegions(next)
+        setSelectedRegion((cur) => (next.some((r) => r.id === cur) ? cur : next[0]?.id ?? null))
+        setRevision((n) => n + 1)
+        return
+      }
+    }
     setRegions((rs) => centreAuto(rs, meta, canvasDims))
     setRevision((n) => n + 1)
-  }, [meta, canvasDims?.w, canvasDims?.h, centreAuto])
+    // Deliberately keyed on canvas/meta only: adding presetDirty here would
+    // re-run the moment an edit marks it dirty and undo that edit.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meta, canvasDims?.w, canvasDims?.h])
 
   /** Where the picture actually sits inside the element after letterboxing. */
   const pictureBox = useMemo(() => {

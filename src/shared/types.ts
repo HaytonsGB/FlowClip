@@ -83,11 +83,33 @@ export function centeredSrc(
   return { x: 0, y: (1 - h) / 2, w: 1, h }
 }
 
+export interface LayoutContext {
+  /** Source video aspect, width / height. */
+  srcAspect: number
+  canvasW: number
+  canvasH: number
+}
+
 export interface LayoutPreset {
   id: string
   name: string
   description: string
-  build: () => Region[]
+  build: (ctx: LayoutContext) => Region[]
+}
+
+/**
+ * Height (0..1 of the canvas) of a full-width band holding the entire source
+ * frame. Sizing the gameplay slot to exactly this means it stays whole with no
+ * letterbox bars.
+ */
+function fullWidthBand(ctx: LayoutContext): number {
+  const px = ctx.canvasW / ctx.srcAspect
+  return Math.min(1, px / ctx.canvasH)
+}
+
+/** A canvas nearly as wide as the source wants overlays, not stacked bands. */
+function isWideCanvas(ctx: LayoutContext): boolean {
+  return fullWidthBand(ctx) > 0.92
 }
 
 let regionSeq = 0
@@ -100,7 +122,7 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     id: 'gameplay',
     name: 'Gameplay only',
     description: 'One centred crop filling the frame',
-    build: () => [
+    build: (): Region[] => [
       {
         id: rid(),
         label: 'Gameplay',
@@ -113,52 +135,80 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
   {
     id: 'cam-top',
     name: 'Camera + gameplay',
-    description: 'Facecam across the top, gameplay below',
-    build: () => [
-      {
+    description: 'Facecam above the gameplay, or picture-in-picture on a wide canvas',
+    build: (ctx) => {
+      const camera: Region = {
         id: rid(),
         label: 'Camera',
         fit: 'cover',
         src: { x: 0.02, y: 0.56, w: 0.26, h: 0.4 },
-        dst: { x: 0, y: 0, w: 1, h: 0.34 }
-      },
-      {
+        dst: { x: 0, y: 0, w: 1, h: 1 }
+      }
+      const gameplay: Region = {
         id: rid(),
         label: 'Gameplay',
-        // Whole frame, letterboxed — a shorter slot must not crop the action.
+        // The whole frame; a shorter slot must never crop the action.
         fit: 'contain',
         src: { x: 0, y: 0, w: 1, h: 1 },
-        dst: { x: 0, y: 0.34, w: 1, h: 0.66 }
+        dst: { x: 0, y: 0, w: 1, h: 1 }
       }
-    ]
+
+      if (isWideCanvas(ctx)) {
+        // Gameplay fills the frame; the camera becomes a corner inset.
+        gameplay.dst = { x: 0, y: 0, w: 1, h: 1 }
+        camera.dst = { x: 0.02, y: 0.63, w: 0.24, h: 0.35 }
+        return [gameplay, camera]
+      }
+
+      // Gameplay takes exactly the band it needs, camera fills what is left.
+      const gh = fullWidthBand(ctx)
+      camera.dst = { x: 0, y: 0, w: 1, h: 1 - gh }
+      gameplay.dst = { x: 0, y: 1 - gh, w: 1, h: gh }
+      return [camera, gameplay]
+    }
   },
   {
     id: 'cam-gameplay-map',
     name: 'Camera + gameplay + minimap',
-    description: 'Adds a corner box for the minimap or kill feed',
-    build: () => [
-      {
+    description: 'Adds a box for the minimap or kill feed',
+    build: (ctx) => {
+      const camera: Region = {
         id: rid(),
         label: 'Camera',
         fit: 'cover',
         src: { x: 0.02, y: 0.56, w: 0.26, h: 0.4 },
-        dst: { x: 0, y: 0, w: 1, h: 0.3 }
-      },
-      {
+        dst: { x: 0, y: 0, w: 1, h: 1 }
+      }
+      const gameplay: Region = {
         id: rid(),
         label: 'Gameplay',
         fit: 'contain',
         src: { x: 0, y: 0, w: 1, h: 1 },
-        dst: { x: 0, y: 0.3, w: 1, h: 0.52 }
-      },
-      {
+        dst: { x: 0, y: 0, w: 1, h: 1 }
+      }
+      const minimap: Region = {
         id: rid(),
         label: 'Minimap',
         fit: 'cover',
         src: { x: 0.78, y: 0.04, w: 0.2, h: 0.26 },
-        dst: { x: 0.02, y: 0.83, w: 0.45, h: 0.15 }
+        dst: { x: 0, y: 0, w: 1, h: 1 }
       }
-    ]
+
+      if (isWideCanvas(ctx)) {
+        gameplay.dst = { x: 0, y: 0, w: 1, h: 1 }
+        camera.dst = { x: 0.02, y: 0.63, w: 0.24, h: 0.35 }
+        minimap.dst = { x: 0.79, y: 0.03, w: 0.19, h: 0.28 }
+        return [gameplay, camera, minimap]
+      }
+
+      const gh = fullWidthBand(ctx)
+      const spare = 1 - gh
+      const camH = spare * 0.62
+      camera.dst = { x: 0, y: 0, w: 1, h: camH }
+      gameplay.dst = { x: 0, y: camH, w: 1, h: gh }
+      minimap.dst = { x: 0, y: camH + gh, w: 1, h: spare - camH }
+      return [camera, gameplay, minimap]
+    }
   }
 ]
 
