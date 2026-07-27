@@ -5,8 +5,11 @@ import type {
   ExportProgress,
   ToolStatus
 } from '../../shared/types'
-import { ASPECT_LABELS, ASPECT_DIMS, mediaUrl } from '../../shared/types'
+import { ASPECT_DIMS, mediaUrl } from '../../shared/types'
 import { TrimBar } from './components/TrimBar'
+import { ToolRail, type ToolId } from './components/ToolRail'
+import { ToolPanel } from './components/ToolPanel'
+import { PlayIcon, PauseIcon, ExportIcon } from './components/Icons'
 import { formatBytes, formatTime, clamp } from './lib/format'
 
 type Status =
@@ -14,8 +17,6 @@ type Status =
   | { kind: 'exporting'; percent: number; speed: string }
   | { kind: 'done'; path: string }
   | { kind: 'error'; message: string }
-
-const ASPECTS: AspectPreset[] = ['vertical', 'square', 'wide', 'source']
 
 /**
  * Fraction of the source frame the export will keep, as {w,h} in 0..1.
@@ -46,6 +47,7 @@ function App(): JSX.Element {
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const [videoBox, setVideoBox] = useState<{ w: number; h: number } | null>(null)
   const [stripUrl, setStripUrl] = useState('')
+  const [tool, setTool] = useState<ToolId>('trim')
 
   /** Element box. The picture inside it is letterboxed by object-fit: contain. */
   useEffect(() => {
@@ -81,11 +83,15 @@ function App(): JSX.Element {
       setCurrent(0)
       setStatus({ kind: 'idle' })
       setStripUrl('')
-      // Thumbnails are a nicety — a failure here must not block editing.
-      window.api
-        .filmstrip(filePath, m.durationSec)
-        .then((strip) => setStripUrl(mediaUrl(strip)))
-        .catch(() => setStripUrl(''))
+      // Thumbnails are a nicety. Isolated in its own try because a missing
+      // bridge method throws synchronously and would otherwise surface as an
+      // "this video failed to load" error.
+      try {
+        const strip = await window.api.filmstrip(filePath, m.durationSec)
+        setStripUrl(mediaUrl(strip))
+      } catch {
+        setStripUrl('')
+      }
     } catch (err) {
       setStatus({ kind: 'error', message: err instanceof Error ? err.message : String(err) })
     }
@@ -234,6 +240,8 @@ function App(): JSX.Element {
         </main>
       ) : (
         <main className="editor">
+          <ToolRail active={tool} onSelect={setTool} disabled={false} />
+          <div className="workspace">
           <section className="stage">
             <video
               ref={videoRef}
@@ -267,40 +275,12 @@ function App(): JSX.Element {
 
           <section className="controls">
             <div className="transport">
-              <button className="btn round" onClick={togglePlay}>
-                {playing ? '❚❚' : '▶'}
+              <button className="btn round" onClick={togglePlay} title="Play / pause (Space)">
+                {playing ? <PauseIcon size={16} /> : <PlayIcon size={16} />}
               </button>
               <span className="time">
                 {formatTime(current)} <span className="dim">/ {formatTime(meta.durationSec)}</span>
               </span>
-
-              <span className="mark-group">
-                <button
-                  className="btn small"
-                  onClick={() => setInSec(clamp(current, 0, outSec - 0.1))}
-                  title="Start the clip at the playhead (I)"
-                >
-                  ⇥ Set start
-                </button>
-                <button
-                  className="btn small"
-                  onClick={() => setOutSec(clamp(current, inSec + 0.1, meta.durationSec))}
-                  title="End the clip at the playhead (O)"
-                >
-                  Set end ⇤
-                </button>
-                <button
-                  className="btn small ghost"
-                  onClick={() => {
-                    setInSec(0)
-                    setOutSec(meta.durationSec)
-                  }}
-                  title="Select the whole video again"
-                >
-                  Reset
-                </button>
-              </span>
-
               <span className="spacer" />
               <span className="meta-chip">
                 {meta.width}×{meta.height}
@@ -321,22 +301,25 @@ function App(): JSX.Element {
             />
 
             <div className="row">
-              <div className="aspect-picker">
-                {ASPECTS.map((a) => (
-                  <button
-                    key={a}
-                    className={`chip ${aspect === a ? 'active' : ''}`}
-                    onClick={() => setAspect(a)}
-                  >
-                    {ASPECT_LABELS[a]}
-                  </button>
-                ))}
-              </div>
+              <ToolPanel
+                tool={tool}
+                aspect={aspect}
+                onAspect={setAspect}
+                onSetIn={() => setInSec(clamp(current, 0, outSec - 0.1))}
+                onSetOut={() => setOutSec(clamp(current, inSec + 0.1, meta.durationSec))}
+                onReset={() => {
+                  setInSec(0)
+                  setOutSec(meta.durationSec)
+                }}
+                cropPercent={guide ? Math.round(Math.min(guide.w, guide.h) * 100) : null}
+              />
               <button
                 className="btn primary export"
                 onClick={doExport}
                 disabled={status.kind === 'exporting' || !tools?.ready}
+                title="Render the selected range to a new file"
               >
+                <ExportIcon size={17} />
                 {status.kind === 'exporting' ? 'Exporting…' : 'Export clip'}
               </button>
             </div>
@@ -363,6 +346,7 @@ function App(): JSX.Element {
               <kbd>←</kbd>/<kbd>→</kbd> step frame · <kbd>Shift</kbd> +arrows to jump 5s
             </p>
           </section>
+          </div>
         </main>
       )}
     </div>

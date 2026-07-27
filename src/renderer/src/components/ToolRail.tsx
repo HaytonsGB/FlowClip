@@ -1,0 +1,59 @@
+import {
+  ScissorsIcon,
+  CropIcon,
+  CaptionsIcon,
+  MusicIcon,
+  TextIcon,
+  StickerIcon,
+  EffectsIcon
+} from './Icons'
+
+export type ToolId = 'trim' | 'reframe' | 'captions' | 'audio' | 'text' | 'stickers' | 'effects'
+
+export interface Tool {
+  id: ToolId
+  label: string
+  icon: (p: { size?: number }) => JSX.Element
+  /** Milestone that delivers it; undefined means it already works. */
+  milestone?: string
+}
+
+export const TOOLS: Tool[] = [
+  { id: 'trim', label: 'Trim', icon: ScissorsIcon },
+  { id: 'reframe', label: 'Reframe', icon: CropIcon },
+  { id: 'captions', label: 'Captions', icon: CaptionsIcon, milestone: 'M2' },
+  { id: 'audio', label: 'Music', icon: MusicIcon, milestone: 'M3' },
+  { id: 'text', label: 'Text', icon: TextIcon, milestone: 'M4' },
+  { id: 'stickers', label: 'Stickers', icon: StickerIcon, milestone: 'M4' },
+  { id: 'effects', label: 'Effects', icon: EffectsIcon, milestone: 'M5' }
+]
+
+interface Props {
+  active: ToolId
+  onSelect: (id: ToolId) => void
+  disabled: boolean
+}
+
+export function ToolRail({ active, onSelect, disabled }: Props): JSX.Element {
+  return (
+    <nav className="rail" aria-label="Tools">
+      {TOOLS.map((tool) => {
+        const Icon = tool.icon
+        return (
+          <button
+            key={tool.id}
+            className={`rail-item ${active === tool.id ? 'active' : ''}`}
+            onClick={() => onSelect(tool.id)}
+            disabled={disabled}
+            aria-current={active === tool.id}
+            title={tool.milestone ? `${tool.label} — planned for ${tool.milestone}` : tool.label}
+          >
+            <Icon size={21} />
+            <span className="rail-label">{tool.label}</span>
+            {tool.milestone && <span className="rail-badge">soon</span>}
+          </button>
+        )
+      })}
+    </nav>
+  )
+}
