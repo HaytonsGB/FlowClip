@@ -503,26 +503,33 @@ body {
   box-shadow: 0 0 20px rgba(244, 114, 230, 0.55), inset 0 0 24px rgba(244, 114, 230, 0.12);
 }
 
-/* Inside the box, not overhanging it — stacked boxes were colliding labels.
-   Hidden until the box is hovered or selected: on anything small, a logo most
-   of all, the label covers the very thing it is labelling. The layers list
-   names them anyway. */
+/* Outside the box, so it never covers the layer it names — a logo box is barely
+   larger than its own label. Safe to overhang now that only the hovered or
+   selected box shows one; when they were all visible at once, a label overhanging
+   upward landed inside the box above it. */
 .region-label {
   position: absolute;
-  top: 3px;
-  left: 3px;
+  bottom: calc(100% + 3px);
+  left: -1px;
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.4px;
   text-transform: uppercase;
   padding: 1px 6px;
   border-radius: 4px;
-  background: rgba(7, 9, 18, 0.88);
+  background: rgba(7, 9, 18, 0.92);
   color: var(--cyan);
   white-space: nowrap;
   pointer-events: none;
   opacity: 0;
   transition: opacity 0.14s;
+  z-index: 4;
+}
+
+/* Boxes at the very top would have the label clipped off the frame. */
+.region.label-below .region-label {
+  bottom: auto;
+  top: calc(100% + 3px);
 }
 
 .region:hover .region-label,

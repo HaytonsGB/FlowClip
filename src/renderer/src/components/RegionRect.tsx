@@ -150,7 +150,11 @@ export function RegionRect({
 
   return (
     <div
-      className={`region ${tone} ${selected ? 'selected' : ''}`}
+      className={`region ${tone} ${selected ? 'selected' : ''} ${
+        // Sits above the box normally; a box near the top has nowhere to put it
+        // there, so it drops underneath instead of being clipped off the frame.
+        rect.y < 0.06 ? 'label-below' : ''
+      }`}
       style={{
         left: `${rect.x * 100}%`,
         top: `${rect.y * 100}%`,
