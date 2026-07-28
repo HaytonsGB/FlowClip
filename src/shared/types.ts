@@ -16,6 +16,8 @@ export interface VideoMeta {
   height: number
   fps: number
   hasAudio: boolean
+  /** 0 when silent. Mono needs care: a plain upmix to stereo costs 3 dB. */
+  audioChannels: number
   sizeBytes: number
 }
 
@@ -543,6 +545,8 @@ export interface ProjectSegment {
   srcHeight: number
   /** Silent sources need generated silence, or they cannot be joined. */
   hasAudio: boolean
+  /** Mono is upmixed with care; a plain conversion to stereo costs 3 dB. */
+  audioChannels: number
   captions?: CaptionTrack
 }
 
@@ -581,6 +585,8 @@ export interface CompositeExportRequest {
   fps?: number
   /** Whether the source carries audio; only consulted when `fps` is set. */
   hasAudio?: boolean
+  /** Source channel count, so mono can be upmixed without losing 3 dB. */
+  audioChannels?: number
 }
 
 export interface ExportRequest {

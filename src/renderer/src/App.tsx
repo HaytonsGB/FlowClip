@@ -528,7 +528,9 @@ function App(): JSX.Element {
       c.words.length > 0 ? { words: c.words, style: capStyle } : undefined
 
     let result
-    if (clips.length > 1) {
+    // Music is mixed by the project path, so anything with audio must go
+    // through it — otherwise a single clip drops the music silently.
+    if (clips.length > 1 || audio.length > 0) {
       // Several clips: render each on the shared canvas, then join them.
       if (!canvasDims) {
         setStatus({
@@ -549,6 +551,7 @@ function App(): JSX.Element {
           srcWidth: c.meta.width,
           srcHeight: c.meta.height,
           hasAudio: c.meta.hasAudio,
+          audioChannels: c.meta.audioChannels,
           captions: trackFor(c)
         }))
       })

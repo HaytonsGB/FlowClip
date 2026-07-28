@@ -87,6 +87,7 @@ export async function probe(filePath: string): Promise<VideoMeta> {
     height: Number(video.height ?? 0),
     fps: parseFps(video.r_frame_rate),
     hasAudio: Boolean(audio),
+    audioChannels: Number(audio?.channels ?? 0),
     sizeBytes: Number(data.format?.size ?? 0)
   }
 }
@@ -400,6 +401,17 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
     : -1
   const audioMap = needSilence ? ['-map', `${silenceIndex}:a`] : ['-map', '0:a?']
 
+  /**
+   * Mono needs duplicating into both channels, not spreading across them.
+   * `-ac 2` distributes the energy and costs exactly 3 dB — measured: a mono
+   * source at -21.1 dB came out at -24.1 dB. `pan` copies it instead, so the
+   * level survives.
+   */
+  const monoFix =
+    forJoin && !needSilence && req.audioChannels === 1
+      ? ['-af', 'pan=stereo|c0=c0|c1=c0']
+      : []
+
   if (forJoin) {
     steps.push(`${finalLabel}fps=${req.fps}[out]`)
     finalLabel = '[out]'
@@ -422,6 +434,7 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
     ...(forJoin ? ['-r', String(req.fps), '-video_track_timescale', '90000'] : []),
     '-c:a', 'aac',
     '-b:a', '192k',
+    ...monoFix,
     ...(forJoin ? ['-ar', '48000', '-ac', '2'] : []),
     '-movflags', '+faststart',
     req.outputPath
@@ -596,7 +609,8 @@ export async function runProjectExport(
         canvas: req.canvas,
         captions: seg.captions,
         fps: req.fps,
-        hasAudio: seg.hasAudio
+        hasAudio: seg.hasAudio,
+        audioChannels: seg.audioChannels
       })
 
       const base = done
