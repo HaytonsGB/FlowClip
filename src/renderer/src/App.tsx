@@ -10,7 +10,8 @@ import type {
   CaptionStyle,
   CaptionPreset,
   WhisperModelId,
-  Clip
+  Clip,
+  AudioTrack
 } from '../../shared/types'
 import {
   ASPECT_DIMS,
@@ -21,6 +22,7 @@ import {
   newImageRegion,
   isImageLayer,
   newClip,
+  newAudioTrack,
   splitClip,
   canSplit,
   projectFps,
@@ -30,6 +32,7 @@ import {
 import { CaptionsPanel, type CaptionJob } from './components/CaptionsPanel'
 import { TranscriptPanel } from './components/TranscriptPanel'
 import { CaptionHandle } from './components/CaptionHandle'
+import { MusicPanel } from './components/MusicPanel'
 import { retimeLine, replaceLine, insertCaption } from '../../shared/captions'
 import {
   layoutClips,
@@ -109,6 +112,9 @@ function App(): JSX.Element {
   const [modelId, setModelId] = useState<WhisperModelId>('base.en')
   const [modelReady, setModelReady] = useState(false)
   const [capJob, setCapJob] = useState<CaptionJob>({ kind: 'idle' })
+  /** Music and effects belong to the project, since a bed runs across cuts. */
+  const [audio, setAudio] = useState<AudioTrack[]>([])
+  const [audioError, setAudioError] = useState<string | null>(null)
   /** Where the project was last saved, so Ctrl+S can save in place. */
   const [projectPath, setProjectPath] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
@@ -158,6 +164,7 @@ function App(): JSX.Element {
     setClips(p.clips)
     setAspect(p.aspect ?? 'vertical')
     if (p.captionStyle) setCapStyle(p.captionStyle)
+    setAudio(p.audio ?? [])
     setActiveId(p.clips[0]?.id ?? null)
     setSelectedRegion(null)
     setProjectSec(0)
@@ -178,7 +185,7 @@ function App(): JSX.Element {
     async (forceDialog = false) => {
       if (!clips.length) return
       const res = await window.api.saveProject(
-        serialiseProject(clips, aspect, capStyle),
+        serialiseProject(clips, aspect, capStyle, audio),
         forceDialog ? undefined : (projectPath ?? undefined)
       )
       if (res.cancelled) return
@@ -190,7 +197,7 @@ function App(): JSX.Element {
         setStatus({ kind: 'error', message: res.error })
       }
     },
-    [clips, aspect, capStyle, projectPath]
+    [clips, aspect, capStyle, audio, projectPath]
   )
 
   const openProject = useCallback(async () => {
@@ -293,10 +300,10 @@ function App(): JSX.Element {
     if (!clips.length) return
     setDirty(true)
     const t = setTimeout(() => {
-      window.api.autosaveProject(serialiseProject(clips, aspect, capStyle))
+      window.api.autosaveProject(serialiseProject(clips, aspect, capStyle, audio))
     }, 1500)
     return () => clearTimeout(t)
-  }, [clips, aspect, capStyle])
+  }, [clips, aspect, capStyle, audio])
 
   useEffect(() => {
     return window.api.onExportProgress((p: ExportProgress) => {
@@ -755,6 +762,23 @@ function App(): JSX.Element {
     setRevision((n) => n + 1)
   }, [regions.length])
 
+  const addAudio = useCallback(
+    async (kind: 'music' | 'sfx') => {
+      setAudioError(null)
+      const picked = await window.api.openAudio()
+      if (!picked) return
+      if (picked.error || !picked.path || !picked.durationSec) {
+        setAudioError(picked.error ?? 'Could not read that audio file')
+        return
+      }
+      setAudio((a) => [
+        ...a,
+        newAudioTrack(picked.path!, picked.fileName ?? 'Audio', picked.durationSec!, kind, projectSec)
+      ])
+    },
+    [projectSec]
+  )
+
   const addImageRegion = useCallback(async () => {
     const picked = await window.api.openImage()
     if (!picked) return
@@ -1184,7 +1208,20 @@ function App(): JSX.Element {
             />
 
             <div className="row">
-              {tool === 'captions' ? (
+              {tool === 'audio' ? (
+                <MusicPanel
+                  tracks={audio}
+                  projectSec={projectSec}
+                  totalSec={total}
+                  error={audioError}
+                  onAdd={addAudio}
+                  onRemove={(id) => setAudio((a) => a.filter((t) => t.id !== id))}
+                  onPatch={(id, patch) =>
+                    setAudio((a) => a.map((t) => (t.id === id ? { ...t, ...patch } : t)))
+                  }
+                  onSeek={seekProject}
+                />
+              ) : tool === 'captions' ? (
                 <CaptionsPanel
                   words={words}
                   style={capStyle}

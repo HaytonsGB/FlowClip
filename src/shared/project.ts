@@ -6,7 +6,7 @@
  * user keeps them. The cost is that a project breaks if its footage is moved,
  * which loading reports per clip rather than failing outright.
  */
-import type { AspectPreset, CaptionStyle, Clip } from './types'
+import type { AspectPreset, AudioTrack, CaptionStyle, Clip } from './types'
 
 /** Bumped when the shape changes in a way older files cannot satisfy. */
 export const PROJECT_VERSION = 1
@@ -20,12 +20,15 @@ export interface ProjectFile {
   aspect: AspectPreset
   captionStyle: CaptionStyle
   clips: Clip[]
+  /** Music and effects; absent on projects saved before they existed. */
+  audio?: AudioTrack[]
 }
 
 export function serialiseProject(
   clips: Clip[],
   aspect: AspectPreset,
-  captionStyle: CaptionStyle
+  captionStyle: CaptionStyle,
+  audio: AudioTrack[] = []
 ): ProjectFile {
   return {
     version: PROJECT_VERSION,
@@ -33,7 +36,8 @@ export function serialiseProject(
     savedAt: new Date().toISOString(),
     aspect,
     captionStyle,
-    clips
+    clips,
+    audio
   }
 }
 
@@ -70,6 +74,7 @@ export function validateProject(data: unknown): ProjectFile {
     savedAt: typeof p.savedAt === 'string' ? p.savedAt : '',
     aspect: (p.aspect ?? 'vertical') as AspectPreset,
     captionStyle: p.captionStyle as CaptionStyle,
-    clips: p.clips as Clip[]
+    clips: p.clips as Clip[],
+    audio: Array.isArray(p.audio) ? (p.audio as AudioTrack[]) : []
   }
 }

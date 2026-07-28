@@ -479,6 +479,54 @@ export function projectDuration(clips: Clip[]): number {
   return clips.reduce((n, c) => n + Math.max(0, c.outSec - c.inSec), 0)
 }
 
+/**
+ * A music bed or sound effect laid over the finished video.
+ *
+ * Audio belongs to the project rather than a clip: a music bed runs across cuts,
+ * and tying it to one clip would mean it stopped at that clip's end.
+ */
+export interface AudioTrack {
+  id: string
+  path: string
+  fileName: string
+  durationSec: number
+  kind: 'music' | 'sfx'
+  /** Where it starts in project time. */
+  startSec: number
+  /** Trim within the audio file itself. */
+  inSec: number
+  outSec: number
+  /** 1 = unchanged. Music defaults low so it sits under speech. */
+  volume: number
+  fadeInSec: number
+  fadeOutSec: number
+}
+
+let audioSeq = 0
+
+export function newAudioTrack(
+  path: string,
+  fileName: string,
+  durationSec: number,
+  kind: 'music' | 'sfx',
+  startSec: number
+): AudioTrack {
+  return {
+    id: `a${Date.now().toString(36)}${(audioSeq++).toString(36)}`,
+    path,
+    fileName,
+    durationSec,
+    kind,
+    startSec: kind === 'music' ? 0 : startSec,
+    inSec: 0,
+    outSec: durationSec,
+    // A bed at full volume buries whatever is being said over it.
+    volume: kind === 'music' ? 0.35 : 0.9,
+    fadeInSec: kind === 'music' ? 0.5 : 0,
+    fadeOutSec: kind === 'music' ? 1 : 0
+  }
+}
+
 /** Burned-in caption track. Absent means no captions on this export. */
 export interface CaptionTrack {
   words: CaptionWord[]
@@ -502,6 +550,8 @@ export interface ProjectExportRequest {
   outputPath: string
   segments: ProjectSegment[]
   canvas: { w: number; h: number }
+  /** Mixed over the finished video, after the clips are joined. */
+  audio?: AudioTrack[]
   /** Every segment is rendered at this rate so the join can be a stream copy. */
   fps: number
 }

@@ -16,6 +16,7 @@ import type {
   ToolStatus,
   CompositeExportRequest,
   ProjectExportRequest,
+  AudioTrack,
   Rect
 } from '../shared/types'
 import { ASPECT_DIMS, isImageLayer } from '../shared/types'
@@ -427,6 +428,101 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
   ]
 }
 
+/**
+ * Mixes music and effects over a finished video.
+ *
+ * Runs as a pass over the joined result rather than per clip, because a music
+ * bed spans cuts and would otherwise stop at the end of whichever clip owned it.
+ * The video is stream-copied, so this costs an audio encode and nothing more.
+ */
+export async function mixAudio(
+  videoPath: string,
+  outputPath: string,
+  tracks: AudioTrack[],
+  videoHasAudio: boolean
+): Promise<void> {
+  const { ffmpegPath } = toolStatus()
+  if (!ffmpegPath) throw new Error('ffmpeg not found')
+  if (!tracks.length) throw new Error('No audio to mix')
+
+  const inputs: string[] = ['-i', videoPath]
+  const steps: string[] = []
+  const mixLabels: string[] = []
+
+  if (videoHasAudio) mixLabels.push('[0:a]')
+
+  tracks.forEach((t, i) => {
+    inputs.push('-i', t.path)
+    const idx = i + 1
+    const label = `m${i}`
+    const delayMs = Math.max(0, Math.round(t.startSec * 1000))
+    const parts = [
+      `atrim=${t.inSec.toFixed(3)}:${Math.max(t.inSec + 0.05, t.outSec).toFixed(3)}`,
+      'asetpts=PTS-STARTPTS',
+      `volume=${t.volume.toFixed(3)}`
+    ]
+    if (t.fadeInSec > 0) parts.push(`afade=t=in:st=0:d=${t.fadeInSec.toFixed(2)}`)
+    if (t.fadeOutSec > 0) {
+      const len = Math.max(0.1, t.outSec - t.inSec)
+      parts.push(
+        `afade=t=out:st=${Math.max(0, len - t.fadeOutSec).toFixed(2)}:d=${t.fadeOutSec.toFixed(2)}`
+      )
+    }
+    // adelay must come after the trim, or it pads the untrimmed stream.
+    if (delayMs > 0) parts.push(`adelay=${delayMs}|${delayMs}`)
+    // Stereo throughout, so amix does not have to reconcile layouts.
+    parts.push('aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo')
+
+    steps.push(`[${idx}:a]${parts.join(',')}[${label}]`)
+    mixLabels.push(`[${label}]`)
+  })
+
+  // duration=first keeps the result the length of the video, so a long music
+  // bed cannot extend it. normalize=0 stops amix quietly halving every level
+  // as tracks are added.
+  steps.push(
+    `${mixLabels.join('')}amix=inputs=${mixLabels.length}:duration=first:normalize=0[aout]`
+  )
+
+  const args = [
+    '-hide_banner', '-y',
+    ...inputs,
+    '-filter_complex', steps.join(';'),
+    '-map', '0:v',
+    '-c:v', 'copy',
+    '-map', '[aout]',
+    '-c:a', 'aac',
+    '-b:a', '192k',
+    '-ar', '48000',
+    '-ac', '2',
+    '-movflags', '+faststart',
+    outputPath
+  ]
+
+  await new Promise<void>((resolve, reject) => {
+    execFile(ffmpegPath, args, { maxBuffer: 10 * 1024 * 1024 }, (err, _o, stderr) => {
+      if (err) reject(new Error(stderr || err.message))
+      else resolve()
+    })
+  })
+}
+
+/** Duration of an audio file, for laying it out on the timeline. */
+export async function probeAudio(filePath: string): Promise<number> {
+  const { ffprobePath } = toolStatus()
+  if (!ffprobePath) throw new Error('ffprobe not found')
+  const out = await new Promise<string>((resolve, reject) => {
+    execFile(
+      ffprobePath,
+      ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', filePath],
+      (err, stdout) => (err ? reject(err) : resolve(stdout))
+    )
+  })
+  const n = Number(out.trim())
+  if (!Number.isFinite(n) || n <= 0) throw new Error('Could not read that audio file')
+  return n
+}
+
 /** Pulls `out_time_ms=` / `speed=` lines out of ffmpeg's -progress stream. */
 function parseProgress(chunk: string, totalSec: number): ExportProgress | null {
   const timeMatch = /out_time_ms=(\d+)/.exec(chunk)
@@ -482,6 +578,8 @@ export async function runProjectExport(
   const totals = req.segments.map((s) => Math.max(0.05, s.endSec - s.startSec))
   const grandTotal = totals.reduce((a, b) => a + b, 0)
   const parts: string[] = []
+  /** Intermediates that are not concat inputs but still need clearing up. */
+  const temps: string[] = []
   let done = 0
 
   try {
@@ -513,37 +611,51 @@ export async function runProjectExport(
       parts.push(out)
     }
 
+    const music = req.audio ?? []
+    // With music to mix, the join lands in a temp file and the mix pass writes
+    // the real output; without it, the join writes there directly.
+    const joined = music.length
+      ? join(work, `joined_${Date.now().toString(36)}.mp4`)
+      : req.outputPath
+    if (music.length) temps.push(joined)
+
     if (parts.length === 1) {
-      copyFileSync(parts[0], req.outputPath)
-      return
+      copyFileSync(parts[0], joined)
+    } else {
+      // The demuxer wants forward slashes and quoted paths, one per line.
+      const listPath = join(work, `list_${Date.now().toString(36)}.txt`)
+      temps.push(listPath)
+      writeFileSync(
+        listPath,
+        parts.map((p) => `file '${p.replace(/\\/g, '/')}'`).join('\n'),
+        'utf8'
+      )
+
+      await runFfmpeg(
+        [
+          '-hide_banner', '-y',
+          '-f', 'concat',
+          '-safe', '0',
+          '-i', listPath,
+          '-c', 'copy',
+          '-movflags', '+faststart',
+          joined
+        ],
+        grandTotal,
+        () => {
+          /* the join is a copy and effectively instant */
+        }
+      )
     }
 
-    // The demuxer wants forward slashes and quoted paths, one per line.
-    const listPath = join(work, `list_${Date.now().toString(36)}.txt`)
-    writeFileSync(
-      listPath,
-      parts.map((p) => `file '${p.replace(/\\/g, '/')}'`).join('\n'),
-      'utf8'
-    )
-
-    await runFfmpeg(
-      [
-        '-hide_banner', '-y',
-        '-f', 'concat',
-        '-safe', '0',
-        '-i', listPath,
-        '-c', 'copy',
-        '-movflags', '+faststart',
-        req.outputPath
-      ],
-      grandTotal,
-      () => {
-        /* the join is a copy and effectively instant */
-      }
-    )
-    rmSync(listPath, { force: true })
+    if (music.length) {
+      onProgress({ percent: 0.98, timeSec: grandTotal, speed: 'mixing audio' })
+      // Every segment carries an audio stream by now, generated if the source
+      // had none, so the video's own audio is always there to mix against.
+      await mixAudio(joined, req.outputPath, music, true)
+    }
   } finally {
-    for (const p of parts) rmSync(p, { force: true })
+    for (const p of [...parts, ...temps]) rmSync(p, { force: true })
   }
 }
 

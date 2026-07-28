@@ -22,7 +22,7 @@ export const TOOLS: Tool[] = [
   { id: 'trim', label: 'Trim', icon: ScissorsIcon },
   { id: 'layout', label: 'Layout', icon: LayersIcon },
   { id: 'captions', label: 'Captions', icon: CaptionsIcon },
-  { id: 'audio', label: 'Music', icon: MusicIcon, milestone: 'M3' },
+  { id: 'audio', label: 'Music', icon: MusicIcon },
   { id: 'text', label: 'Text', icon: TextIcon, milestone: 'M4' },
   { id: 'stickers', label: 'Stickers', icon: StickerIcon, milestone: 'M4' },
   { id: 'effects', label: 'Effects', icon: EffectsIcon, milestone: 'M5' }

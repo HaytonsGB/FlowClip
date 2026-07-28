@@ -7,6 +7,7 @@ import {
   runExport,
   runCompositeExport,
   runProjectExport,
+  probeAudio,
   toolStatus,
   rescanTools,
   filmstrip
@@ -129,6 +130,24 @@ function registerIpc(): void {
   })
 
   ipcMain.handle('video:probe', async (_e, filePath: string) => probe(filePath))
+
+  ipcMain.handle('dialog:openAudio', async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Add music or a sound effect',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Audio', extensions: ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac', 'opus'] },
+        { name: 'All files', extensions: ['*'] }
+      ]
+    })
+    if (result.canceled || !result.filePaths.length) return null
+    const p = result.filePaths[0]
+    try {
+      return { path: p, fileName: basename(p), durationSec: await probeAudio(p) }
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) }
+    }
+  })
 
   ipcMain.handle('dialog:openImage', async () => {
     const result = await dialog.showOpenDialog({

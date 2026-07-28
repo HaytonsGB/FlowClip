@@ -22,6 +22,12 @@ const api = {
   probe: (filePath: string): Promise<VideoMeta> => ipcRenderer.invoke('video:probe', filePath),
   openImage: (): Promise<{ path: string; fileName: string } | null> =>
     ipcRenderer.invoke('dialog:openImage'),
+  openAudio: (): Promise<{
+    path?: string
+    fileName?: string
+    durationSec?: number
+    error?: string
+  } | null> => ipcRenderer.invoke('dialog:openAudio'),
   filmstrip: (filePath: string, durationSec: number): Promise<string> =>
     ipcRenderer.invoke('video:filmstrip', filePath, durationSec),
   suggestOutput: (inputPath: string): Promise<string> =>
