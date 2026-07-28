@@ -116,7 +116,6 @@ function App(): JSX.Element {
   /** Bumped on any region edit so the paused canvas preview repaints. */
   const [revision, setRevision] = useState(0)
   const pictureRef = useRef<HTMLDivElement>(null)
-  const outPaneRef = useRef<HTMLDivElement>(null)
   const outFrameRef = useRef<HTMLDivElement>(null)
 
   /**
@@ -647,7 +646,7 @@ function App(): JSX.Element {
 
   const missingTools = tools && !tools.ready
   const guide = cropGuide(meta, aspect)
-  const outBox = useFit(outPaneRef, canvasDims ? canvasDims.w / canvasDims.h : 1)
+  const [outPaneRef, outBox] = useFit(canvasDims ? canvasDims.w / canvasDims.h : 1)
 
   /** Resolve any auto-centred boxes against the real source and canvas sizes. */
   const centreAuto = useCallback(
