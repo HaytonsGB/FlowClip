@@ -503,7 +503,10 @@ body {
   box-shadow: 0 0 20px rgba(244, 114, 230, 0.55), inset 0 0 24px rgba(244, 114, 230, 0.12);
 }
 
-/* Inside the box, not overhanging it — stacked boxes were colliding labels. */
+/* Inside the box, not overhanging it — stacked boxes were colliding labels.
+   Hidden until the box is hovered or selected: on anything small, a logo most
+   of all, the label covers the very thing it is labelling. The layers list
+   names them anyway. */
 .region-label {
   position: absolute;
   top: 3px;
@@ -514,17 +517,17 @@ body {
   text-transform: uppercase;
   padding: 1px 6px;
   border-radius: 4px;
-  background: rgba(7, 9, 18, 0.78);
+  background: rgba(7, 9, 18, 0.88);
   color: var(--cyan);
   white-space: nowrap;
   pointer-events: none;
-  opacity: 0.75;
+  opacity: 0;
   transition: opacity 0.14s;
 }
 
+.region:hover .region-label,
 .region.selected .region-label {
   opacity: 1;
-  background: rgba(7, 9, 18, 0.92);
 }
 
 .region.dst .region-label {
