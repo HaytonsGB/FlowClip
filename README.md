@@ -15,8 +15,8 @@ FFmpeg is bundled, so there is nothing else to install. Windows may warn that th
 is unknown — the installer is not code signed. Choose **More info → Run anyway** if you are
 happy to.
 
-> **Early build.** Multi-clip editing, layout compositing, image overlays and captions work end
-> to end. Music is not built yet — see the roadmap.
+> **Early build.** Multi-clip editing, layout compositing, image overlays, captions and music
+> all work end to end. Text and stickers are not built yet — see the roadmap.
 
 ## What it does today
 
@@ -60,6 +60,12 @@ Voice activity detection is on by default. Without it whisper spreads word timin
 silence — given three seconds of quiet before speech it puts the first word at 0:00, so the
 opening caption sits on screen before anyone talks.
 
+**Music and effects** — drop in a bed that plays under the whole video, and effects that land
+wherever the playhead is. Music is mixed after the clips are joined, so it carries across cuts
+rather than stopping at the end of whichever clip owned it, and the video stream is copied
+through that pass so nothing is re-encoded. Everything plays in the preview too, since a mix
+you cannot hear is a mix you cannot judge.
+
 ## Roadmap
 
 | Milestone | What lands | Status |
@@ -69,8 +75,8 @@ opening caption sits on screen before anyone talks.
 | M2 | Local Whisper captions, styled and editable | ✅ |
 | M3 | Multi-clip timeline, split, undo, project files | ✅ |
 | M4 | Images and logos as layers | ✅ |
-| M5 | Music and sound effects | ⬜ |
-| M6 | Text, stickers, transitions, effects | ⬜ |
+| M5 | Music and sound effects | ✅ |
+| M6 | Text, stickers, transitions, colour | ⬜ |
 
 ## Shortcuts
 
