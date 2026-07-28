@@ -1,6 +1,6 @@
 {
   "name": "flowclip",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "FlowClip — local, private viral-clip editor for TikTok & YouTube Shorts",
   "main": "./out/main/index.js",
   "author": "HaytonsGB",

@@ -15,14 +15,17 @@ FFmpeg is bundled, so there is nothing else to install. Windows may warn that th
 is unknown — the installer is not code signed. Choose **More info → Run anyway** if you are
 happy to.
 
-> **Early build.** Trimming, layout compositing and captions work end to end. Music and
-> multi-clip editing are not built yet — see the roadmap.
+> **Early build.** Multi-clip editing, layout compositing and captions work end to end. Music
+> and image overlays are not built yet — see the roadmap.
 
 ## What it does today
 
-**Trim** — open a video, scrub a filmstrip timeline, drag in/out handles, and preview the
-selection on loop before exporting. Trims that need no reframing use a stream copy, so they
-are near-instant and lossless.
+**Edit a project, not just a clip.** Several clips sit end to end on one timeline with a
+single playhead running across all of them, so you can watch the piece through and judge
+whether a cut lands. Trim by dragging a clip's edges, split it at the playhead with `S`, and
+reorder or remove clips in place. Every clip keeps its own trim, layout and captions, because
+two recordings rarely want the same treatment. `Ctrl+Z` undoes anything, and projects save to
+a small file that stores the edit rather than the footage.
 
 **Layout** — the interesting part. Rather than cropping a 16:9 gameplay clip down to a
 vertical slice and throwing most of the frame away, you compose the output from **regions**:
@@ -60,9 +63,9 @@ opening caption sits on screen before anyone talks.
 | M1 | Load · preview · trim · reframe · export | ✅ |
 | M1.5 | Multi-region layout compositor, packaged installer | ✅ |
 | M2 | Local Whisper captions, styled and editable | ✅ |
-| M3 | Multi-clip timeline, media pool, music & SFX | ⬜ |
-| M4 | Text, meme and sticker overlays | ⬜ |
-| M5 | Transitions, effects, export presets | ⬜ |
+| M3 | Multi-clip timeline, split, undo, project files | ✅ |
+| M4 | Images and logos as layers, music & SFX | ⬜ |
+| M5 | Text, stickers, transitions, effects | ⬜ |
 
 ## Shortcuts
 
@@ -73,6 +76,9 @@ opening caption sits on screen before anyone talks.
 | `←` `→` | Step one frame — or nudge the selected box in Layout |
 | `Shift` + arrows | Jump 5 seconds — or nudge a box further |
 | `Shift` + drag | Resize a layout box keeping its shape |
+| `S` | Split the clip at the playhead |
+| `Ctrl` + `Z` / `Ctrl` + `Shift` + `Z` | Undo / redo |
+| `Ctrl` + `S` / `Ctrl` + `O` | Save / open a project |
 | `Enter` | Commit a caption line you are editing |
 
 ## How it works
@@ -87,6 +93,13 @@ opening caption sits on screen before anyone talks.
 - **whisper.cpp** transcribes locally; captions are burned in as an ASS track, one event per
   word so the timing is exactly what whisper reported. A word stays on screen until the next
   one begins, otherwise the line blinks out during every pause between words.
+- Multi-clip export renders each clip through the same composite path and joins the results.
+  Rendering separately is what lets every clip keep its own layout and captions, and since the
+  segments share a canvas, frame rate and audio format, the join is a stream copy rather than
+  a second encode. Silent sources get generated silence, or they cannot be joined at all.
+- Project time and clip-local time are different things — the timeline runs `0..total` while
+  each video element still seeks in its own source — so the conversion lives in one place
+  (`src/shared/timeline.ts`) rather than being re-derived per component.
 - The renderer has no Node access; it talks to the main process over a narrow preload bridge
   (`src/preload/index.ts`).
 
