@@ -208,6 +208,24 @@ export function MarkOutIcon(p: IconProps): JSX.Element {
   )
 }
 
+export function UndoIcon(p: IconProps): JSX.Element {
+  return (
+    <Svg {...p}>
+      <path d="M4 10h11a5 5 0 0 1 0 10h-6" />
+      <path d="M8 6l-4 4 4 4" />
+    </Svg>
+  )
+}
+
+export function RedoIcon(p: IconProps): JSX.Element {
+  return (
+    <Svg {...p}>
+      <path d="M20 10H9a5 5 0 0 0 0 10h6" />
+      <path d="M16 6l4 4-4 4" />
+    </Svg>
+  )
+}
+
 export function ResetIcon(p: IconProps): JSX.Element {
   return (
     <Svg {...p}>

@@ -405,6 +405,45 @@ export function newClip(meta: VideoMeta): Clip {
   }
 }
 
+/** Shortest half a split may leave, so a stray click cannot make a sliver. */
+export const MIN_SPLIT_SEC = 0.2
+
+export function canSplit(clip: Clip, atSourceSec: number): boolean {
+  return (
+    atSourceSec > clip.inSec + MIN_SPLIT_SEC && atSourceSec < clip.outSec - MIN_SPLIT_SEC
+  )
+}
+
+/**
+ * Cuts a clip in two at a point in its source.
+ *
+ * Both halves keep the same layout, since they are the same footage, but their
+ * region ids are regenerated so selection cannot address a box in the wrong
+ * clip. Captions follow whichever half their words fall into.
+ */
+export function splitClip(clip: Clip, atSourceSec: number): [Clip, Clip] | null {
+  if (!canSplit(clip, atSourceSec)) return null
+
+  const cloneRegions = (): Region[] => clip.regions.map((r) => ({ ...r, id: rid() }))
+
+  const head: Clip = {
+    ...clip,
+    outSec: atSourceSec,
+    regions: cloneRegions(),
+    words: clip.words.filter((w) => w.start < atSourceSec)
+  }
+
+  const tail: Clip = {
+    ...clip,
+    id: `c${Date.now().toString(36)}${(clipSeq++).toString(36)}`,
+    inSec: atSourceSec,
+    regions: cloneRegions(),
+    words: clip.words.filter((w) => w.start >= atSourceSec)
+  }
+
+  return [head, tail]
+}
+
 /** Total runtime of the project — the sum of the trimmed clips. */
 export function projectDuration(clips: Clip[]): number {
   return clips.reduce((n, c) => n + Math.max(0, c.outSec - c.inSec), 0)

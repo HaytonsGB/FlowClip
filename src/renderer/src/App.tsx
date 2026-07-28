@@ -19,6 +19,8 @@ import {
   mediaUrl,
   newRegion,
   newClip,
+  splitClip,
+  canSplit,
   projectFps,
   defaultCaptionStyle,
   CAPTION_PRESETS
@@ -39,9 +41,17 @@ import { RegionRect } from './components/RegionRect'
 import { LayersPanel } from './components/LayersPanel'
 import { OutputPreview } from './components/OutputPreview'
 import { useFit } from './lib/useFit'
+import { useUndo } from './lib/useUndo'
 import { ToolRail, type ToolId } from './components/ToolRail'
 import { ToolPanel } from './components/ToolPanel'
-import { PlayIcon, PauseIcon, ExportIcon } from './components/Icons'
+import {
+  PlayIcon,
+  PauseIcon,
+  ExportIcon,
+  ScissorsIcon,
+  UndoIcon,
+  RedoIcon
+} from './components/Icons'
 import { formatBytes, formatTime, clamp } from './lib/format'
 import markUrl from './assets/mark.png'
 
@@ -124,6 +134,18 @@ function App(): JSX.Element {
       )
     }
   }
+
+  /** Undo covers the clips — trims, layouts and captions all live on them. */
+  const { undo, redo, canUndo, canRedo } = useUndo<Clip[]>({
+    value: clips,
+    apply: (restored) => {
+      setClips(restored)
+      // The selected clip may have been removed or split away.
+      if (!restored.some((c) => c.id === activeId)) setActiveId(restored[0]?.id ?? null)
+      setSelectedRegion(null)
+      setRevision((n) => n + 1)
+    }
+  })
 
   const spans = useMemo(() => layoutClips(clips), [clips])
   const total = totalDuration(spans)
@@ -247,6 +269,18 @@ function App(): JSX.Element {
     },
     [activeId]
   )
+
+  /** Cuts the clip under the playhead in two, keeping the playhead where it is. */
+  const splitAtPlayhead = useCallback(() => {
+    if (!active) return
+    const parts = splitClip(active, current)
+    if (!parts) return
+    const [head, tail] = parts
+    setClips((cs) => cs.flatMap((c) => (c.id === active.id ? [head, tail] : [c])))
+    // Carry on in the second half, which is where the playhead now sits.
+    setActiveId(tail.id)
+    setSelectedRegion(null)
+  }, [active, current])
 
   const moveClip = useCallback((id: string, dir: -1 | 1) => {
     setClips((cs) => {
@@ -450,9 +484,25 @@ function App(): JSX.Element {
       if (!meta) return
       const target = e.target as HTMLElement
       if (target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA') return
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) redo()
+        else undo()
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault()
+        redo()
+        return
+      }
+      if (e.ctrlKey || e.metaKey) return
+
       if (e.code === 'Space') {
         e.preventDefault()
         togglePlay()
+      } else if (e.key === 's' || e.key === 'S') {
+        e.preventDefault()
+        splitAtPlayhead()
       } else if (e.key === 'i' || e.key === 'I') {
         setInSec(clamp(current, 0, outSec - 0.1))
       } else if (e.key === 'o' || e.key === 'O') {
@@ -493,7 +543,10 @@ function App(): JSX.Element {
     tool,
     regions,
     selectedRegion,
-    updateRegion
+    updateRegion,
+    splitAtPlayhead,
+    undo,
+    redo
   ])
 
   const missingTools = tools && !tools.ready
@@ -902,8 +955,36 @@ function App(): JSX.Element {
                 {playing ? <PauseIcon size={16} /> : <PlayIcon size={16} />}
               </button>
               <span className="time">
-                {formatTime(current)} <span className="dim">/ {formatTime(meta.durationSec)}</span>
+                {formatTime(projectSec)} <span className="dim">/ {formatTime(total)}</span>
               </span>
+
+              <span className="mark-group">
+                <button
+                  className="btn small"
+                  onClick={splitAtPlayhead}
+                  disabled={!active || !canSplit(active, current)}
+                  title="Split the clip at the playhead (S)"
+                >
+                  <ScissorsIcon size={15} /> Split
+                </button>
+                <button
+                  className="btn small ghost"
+                  onClick={undo}
+                  disabled={!canUndo}
+                  title="Undo (Ctrl+Z)"
+                >
+                  <UndoIcon size={15} />
+                </button>
+                <button
+                  className="btn small ghost"
+                  onClick={redo}
+                  disabled={!canRedo}
+                  title="Redo (Ctrl+Shift+Z)"
+                >
+                  <RedoIcon size={15} />
+                </button>
+              </span>
+
               <span className="spacer" />
               <span className="meta-chip">
                 {meta.width}×{meta.height}
