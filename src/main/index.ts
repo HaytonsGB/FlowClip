@@ -130,6 +130,20 @@ function registerIpc(): void {
 
   ipcMain.handle('video:probe', async (_e, filePath: string) => probe(filePath))
 
+  ipcMain.handle('dialog:openImage', async () => {
+    const result = await dialog.showOpenDialog({
+      title: 'Add an image or logo',
+      properties: ['openFile'],
+      filters: [
+        { name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'] },
+        { name: 'All files', extensions: ['*'] }
+      ]
+    })
+    if (result.canceled || !result.filePaths.length) return null
+    const p = result.filePaths[0]
+    return { path: p, fileName: basename(p) }
+  })
+
   ipcMain.handle('video:filmstrip', async (_e, filePath: string, durationSec: number) =>
     filmstrip(filePath, durationSec)
   )

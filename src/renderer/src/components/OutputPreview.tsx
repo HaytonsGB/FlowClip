@@ -1,5 +1,6 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Region, Rect, CaptionWord, CaptionStyle } from '../../../shared/types'
+import { mediaUrl } from '../../../shared/types'
 import { groupIntoLines, wordWindows } from '../../../shared/captions'
 
 interface Props {
@@ -96,6 +97,22 @@ export function OutputPreview({
   captionStyle
 }: Props): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  /** Decoded image layers, kept across frames so the draw loop stays cheap. */
+  const images = useRef(new Map<string, HTMLImageElement>())
+  const [imagesReady, setImagesReady] = useState(0)
+
+  useEffect(() => {
+    for (const region of regions) {
+      const path = region.source?.path
+      if (!path || images.current.has(path)) continue
+      const img = new Image()
+      // Loaded through the same privileged scheme the video uses, since the
+      // renderer cannot read from disk directly.
+      img.src = mediaUrl(path)
+      img.onload = () => setImagesReady((n) => n + 1)
+      images.current.set(path, img)
+    }
+  }, [regions])
 
   useEffect(() => {
     const el = canvasRef.current
@@ -122,6 +139,19 @@ export function OutputPreview({
           const shorter = Math.min(dw, dh)
           const radius = Math.min(shorter / 2, (region.radius ?? 0) * shorter)
           const border = (region.border ?? 0) * shorter
+
+          // Image layers are contained and overlaid as-is, never padded or
+          // backed, so a transparent PNG stays transparent.
+          if (region.source?.kind === 'image') {
+            const img = images.current.get(region.source.path)
+            if (img?.complete && img.naturalWidth > 0) {
+              const scale = Math.min(dw / img.naturalWidth, dh / img.naturalHeight)
+              const w = img.naturalWidth * scale
+              const h = img.naturalHeight * scale
+              ctx.drawImage(img, dx + (dw - w) / 2, dy + (dh - h) / 2, w, h)
+            }
+            continue
+          }
 
           try {
             // Clip to the rounded slot so corners match the exported mask.
@@ -192,7 +222,17 @@ export function OutputPreview({
 
     draw()
     return () => cancelAnimationFrame(raf)
-  }, [videoRef, regions, canvas, canvas.w, canvas.h, revision, words, captionStyle])
+  }, [
+    videoRef,
+    regions,
+    canvas,
+    canvas.w,
+    canvas.h,
+    revision,
+    words,
+    captionStyle,
+    imagesReady
+  ])
 
   return <canvas ref={canvasRef} width={canvas.w} height={canvas.h} className="output-canvas" />
 }

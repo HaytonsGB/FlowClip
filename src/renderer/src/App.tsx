@@ -18,6 +18,8 @@ import {
   centeredSrc,
   mediaUrl,
   newRegion,
+  newImageRegion,
+  isImageLayer,
   newClip,
   splitClip,
   canSplit,
@@ -746,6 +748,17 @@ function App(): JSX.Element {
     setRevision((n) => n + 1)
   }, [regions.length])
 
+  const addImageRegion = useCallback(async () => {
+    const picked = await window.api.openImage()
+    if (!picked) return
+    const r = newImageRegion(picked.path, picked.fileName)
+    setRegions((rs) => [...rs, r])
+    setSelectedRegion(r.id)
+    setActivePreset(null)
+    setPresetDirty(true)
+    setRevision((n) => n + 1)
+  }, [])
+
   const removeRegion = useCallback((id: string) => {
     setRegions((rs) => rs.filter((r) => r.id !== id))
     setActivePreset(null)
@@ -983,7 +996,9 @@ function App(): JSX.Element {
                 ref={pictureRef}
                 style={{ width: `${pictureBox.w}px`, height: `${pictureBox.h}px` }}
               >
-                {regions.map((r) => (
+                {/* Image layers draw from their own file, so they have nothing
+                    to crop out of the footage and do not belong on this pane. */}
+                {regions.filter((r) => !isImageLayer(r)).map((r) => (
                   <RegionRect
                     key={r.id}
                     rect={r.src}
@@ -1084,6 +1099,7 @@ function App(): JSX.Element {
               onMove={moveRegion}
               onRemove={removeRegion}
               onAdd={addRegion}
+              onAddImage={addImageRegion}
               onFit={setFit}
               onBackdrop={setBackdrop}
               onStyle={setStyle}

@@ -1,6 +1,6 @@
 import type { Region, FitMode, BackdropMode } from '../../../shared/types'
-import { RADIUS_STEPS, BORDER_STEPS } from '../../../shared/types'
-import { PlusIcon, TrashIcon, ArrowUpIcon, ArrowDownIcon } from './Icons'
+import { RADIUS_STEPS, BORDER_STEPS, isImageLayer } from '../../../shared/types'
+import { PlusIcon, TrashIcon, ArrowUpIcon, ArrowDownIcon, ImageIcon } from './Icons'
 
 interface Props {
   regions: Region[]
@@ -9,6 +9,7 @@ interface Props {
   onMove: (id: string, dir: -1 | 1) => void
   onRemove: (id: string) => void
   onAdd: () => void
+  onAddImage: () => void
   onFit: (id: string, fit: FitMode) => void
   onBackdrop: (id: string, backdrop: BackdropMode) => void
   onStyle: (id: string, patch: { radius?: number; border?: number }) => void
@@ -34,6 +35,7 @@ export function LayersPanel({
   onMove,
   onRemove,
   onAdd,
+  onAddImage,
   onFit,
   onBackdrop,
   onStyle
@@ -59,7 +61,10 @@ export function LayersPanel({
               onClick={() => onSelect(r.id)}
             >
               <div className="layer-row">
-                <span className="layer-name">{r.label}</span>
+                <span className="layer-name">
+                  {isImageLayer(r) && <ImageIcon size={12} />}
+                  {r.label}
+                </span>
                 <div className="layer-order">
                   <button
                     className="icon-btn"
@@ -96,25 +101,28 @@ export function LayersPanel({
                 </div>
               </div>
 
-              <div className="fit-toggle" onClick={(e) => e.stopPropagation()}>
-                <button
-                  className={`fit-opt ${r.fit !== 'contain' ? 'on' : ''}`}
-                  onClick={() => onFit(r.id, 'cover')}
-                  title="Fill the slot, cropping the overflow"
-                >
-                  Fill
-                </button>
-                <button
-                  className={`fit-opt ${r.fit === 'contain' ? 'on' : ''}`}
-                  onClick={() => onFit(r.id, 'contain')}
-                  title="Keep the whole frame, letterboxing the slack"
-                >
-                  Fit
-                </button>
-              </div>
+              {/* An image is always contained and never backed, so neither
+                  control applies to one. */}
+              {!isImageLayer(r) && (
+                <div className="fit-toggle" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    className={`fit-opt ${r.fit !== 'contain' ? 'on' : ''}`}
+                    onClick={() => onFit(r.id, 'cover')}
+                    title="Fill the slot, cropping the overflow"
+                  >
+                    Fill
+                  </button>
+                  <button
+                    className={`fit-opt ${r.fit === 'contain' ? 'on' : ''}`}
+                    onClick={() => onFit(r.id, 'contain')}
+                    title="Keep the whole frame, letterboxing the slack"
+                  >
+                    Fit
+                  </button>
+                </div>
+              )}
 
-              {/* Only a fitted layer has slack to fill. */}
-              {r.fit === 'contain' && (
+              {!isImageLayer(r) && r.fit === 'contain' && (
                 <div className="fit-toggle backdrop" onClick={(e) => e.stopPropagation()}>
                   <button
                     className={`fit-opt ${r.backdrop !== 'black' ? 'on' : ''}`}
@@ -172,9 +180,18 @@ export function LayersPanel({
         })}
       </div>
 
-      <button className="btn small add-layer" onClick={onAdd}>
-        <PlusIcon size={14} /> Add layer
-      </button>
+      <div className="add-row">
+        <button className="btn small add-layer" onClick={onAdd} title="A box that crops the footage">
+          <PlusIcon size={14} /> Box
+        </button>
+        <button
+          className="btn small add-layer"
+          onClick={onAddImage}
+          title="A logo, watermark or any image"
+        >
+          <ImageIcon size={14} /> Image
+        </button>
+      </div>
     </aside>
   )
 }

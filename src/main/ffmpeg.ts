@@ -18,7 +18,8 @@ import type {
   ProjectExportRequest,
   Rect
 } from '../shared/types'
-import { ASPECT_DIMS } from '../shared/types'
+import { ASPECT_DIMS, isImageLayer } from '../shared/types'
+import type { Region } from '../shared/types'
 import { writeAss, escapeFilterPath } from './captions'
 
 const EXE = process.platform === 'win32' ? '.exe' : ''
@@ -270,25 +271,56 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
   const duration = Math.max(0.05, req.endSec - req.startSec)
   const steps: string[] = [`color=c=black:s=${canvas.w}x${canvas.h}:d=${duration.toFixed(3)}[bg]`]
 
-  // One split output per region; ffmpeg cannot consume a stream twice.
-  const labels = regions.map((_, i) => `[s${i}]`).join('')
-  steps.push(`[0:v]split=${regions.length}${labels}`)
+  /**
+   * Extra ffmpeg inputs after the video, in the order they are declared. Image
+   * layers and corner masks both land here, so indices are handed out from one
+   * counter rather than each guessing where the other stopped.
+   */
+  const extraInputs: string[] = []
+  let nextInput = 1
+  const addInput = (args: string[]): number => {
+    extraInputs.push(...args)
+    return nextInput++
+  }
 
-  /** Mask images become extra inputs, so input 0 stays the video. */
-  const maskInputs: string[] = []
+  // Image layers draw from their own input, so only video layers are split off
+  // the source; ffmpeg cannot consume one stream twice.
+  const videoRegions = regions.filter((r) => !isImageLayer(r))
+  if (videoRegions.length > 0) {
+    const labels = videoRegions.map((r) => `[s_${r.id}]`).join('')
+    steps.push(
+      videoRegions.length === 1
+        ? `[0:v]null${labels}`
+        : `[0:v]split=${videoRegions.length}${labels}`
+    )
+  }
 
   for (const [i, region] of regions.entries()) {
-    const s = toPixels(region.src, srcWidth, srcHeight)
     const d = toPixels(region.dst, canvas.w, canvas.h)
-    const crop = `crop=${s.w}:${s.h}:${s.x}:${s.y}`
-    const fill = `scale=${d.w}:${d.h}:force_original_aspect_ratio=increase,crop=${d.w}:${d.h}`
     const shaped = `sh${i}`
 
+    // An image layer is scaled to fit its slot and overlaid as-is. It is never
+    // padded or backed, so a PNG's transparency reaches the canvas intact.
+    if (isImageLayer(region) && region.source) {
+      const idx = addInput(['-loop', '1', '-i', region.source.path])
+      steps.push(
+        `[${idx}:v]scale=${d.w}:${d.h}:force_original_aspect_ratio=decrease,` +
+          `setsar=1,format=rgba[${shaped}]`
+      )
+      await finishRegion(region, i, shaped, d)
+      continue
+    }
+
+    const s = toPixels(region.src, srcWidth, srcHeight)
+    const crop = `crop=${s.w}:${s.h}:${s.x}:${s.y}`
+    const fill = `scale=${d.w}:${d.h}:force_original_aspect_ratio=increase,crop=${d.w}:${d.h}`
+
+    const from = `[s_${region.id}]`
     if (region.fit !== 'contain') {
-      steps.push(`[s${i}]${crop},${fill},setsar=1[${shaped}]`)
+      steps.push(`${from}${crop},${fill},setsar=1[${shaped}]`)
     } else if (region.backdrop === 'black') {
       steps.push(
-        `[s${i}]${crop},scale=${d.w}:${d.h}:force_original_aspect_ratio=decrease,` +
+        `${from}${crop},scale=${d.w}:${d.h}:force_original_aspect_ratio=decrease,` +
           `pad=${d.w}:${d.h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1[${shaped}]`
       )
     } else {
@@ -296,7 +328,7 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
       // keeps the whole frame and sits centred on top.
       const bw = Math.max(16, evenClamp(d.w / 8, d.w))
       const bh = Math.max(16, evenClamp(d.h / 8, d.h))
-      steps.push(`[s${i}]split=2[a${i}][b${i}]`)
+      steps.push(`${from}split=2[a${i}][b${i}]`)
       steps.push(
         // Blurring a downscaled copy then scaling back up is far cheaper than
         // blurring at full size, and indistinguishable once soft.
@@ -309,7 +341,16 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
       steps.push(`[bg${i}][fg${i}]overlay=(W-w)/2:(H-h)/2[${shaped}]`)
     }
 
-    // Border and rounded corners apply to the finished slot-sized layer.
+    await finishRegion(region, i, shaped, d)
+  }
+
+  /** Applies border and rounded corners, leaving the layer as [r{i}]. */
+  async function finishRegion(
+    region: Region,
+    i: number,
+    shaped: string,
+    d: { w: number; h: number }
+  ): Promise<void> {
     const shorter = Math.min(d.w, d.h)
     const borderPx = Math.round((region.border ?? 0) * shorter)
     const radiusPx = Math.min(
@@ -319,16 +360,13 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
 
     let current = shaped
     if (borderPx > 0) {
-      steps.push(
-        `[${current}]drawbox=x=0:y=0:w=iw:h=ih:color=white@1:t=${borderPx}[bd${i}]`
-      )
+      steps.push(`[${current}]drawbox=x=0:y=0:w=iw:h=ih:color=white@1:t=${borderPx}[bd${i}]`)
       current = `bd${i}`
     }
 
     if (radiusPx > 1) {
       const maskPath = await roundedMask(d.w, d.h, radiusPx)
-      const maskIndex = maskInputs.length + 1
-      maskInputs.push(maskPath)
+      const maskIndex = addInput(['-loop', '1', '-i', maskPath])
       steps.push(`[${current}]format=rgba[rg${i}]`)
       steps.push(`[rg${i}][${maskIndex}:v]alphamerge[r${i}]`)
     } else {
@@ -350,20 +388,16 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
     steps.push(`${finalLabel}subtitles='${escapeFilterPath(assPath)}'[cap]`)
     finalLabel = '[cap]'
   }
-  // -loop keeps each still mask supplying frames for the whole clip.
-  const maskArgs = maskInputs.flatMap((p) => ['-loop', '1', '-i', p])
-
   // Joining segments by stream copy only works if they agree on frame rate and
   // audio layout, and a silent source would otherwise produce a segment with no
   // audio stream at all to join against.
   const forJoin = req.fps !== undefined
   const needSilence = forJoin && req.hasAudio === false
-  const silenceArgs = needSilence
-    ? ['-f', 'lavfi', '-t', duration.toFixed(3), '-i', 'anullsrc=r=48000:cl=stereo']
-    : []
-  const audioMap = needSilence
-    ? ['-map', `${maskInputs.length + 1}:a`]
-    : ['-map', '0:a?']
+  // Declared last, so it takes whatever index the images and masks left free.
+  const silenceIndex = needSilence
+    ? addInput(['-f', 'lavfi', '-t', duration.toFixed(3), '-i', 'anullsrc=r=48000:cl=stereo'])
+    : -1
+  const audioMap = needSilence ? ['-map', `${silenceIndex}:a`] : ['-map', '0:a?']
 
   if (forJoin) {
     steps.push(`${finalLabel}fps=${req.fps}[out]`)
@@ -375,8 +409,7 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
     '-y',
     '-ss', req.startSec.toFixed(3),
     '-i', req.inputPath,
-    ...maskArgs,
-    ...silenceArgs,
+    ...extraInputs,
     '-t', duration.toFixed(3),
     '-filter_complex', steps.join(';'),
     '-map', finalLabel,

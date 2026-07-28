@@ -52,11 +52,20 @@ export type FitMode = 'cover' | 'contain'
  */
 export type BackdropMode = 'blur' | 'black'
 
+/**
+ * Where a layer draws from. Absent means the clip's own footage, which is what
+ * every layer was before images existed.
+ */
+export type LayerSource = { kind: 'image'; path: string; fileName: string }
+
 export interface Region {
   id: string
   label: string
+  /** Crop from the source. For an image layer this crops the image. */
   src: Rect
   dst: Rect
+  /** Undefined = the clip's video. */
+  source?: LayerSource
   fit?: FitMode
   /** Only meaningful when `fit` is 'contain'. Defaults to 'blur'. */
   backdrop?: BackdropMode
@@ -237,6 +246,27 @@ export const LAYOUT_PRESETS: LayoutPreset[] = [
     }
   }
 ]
+
+export function isImageLayer(region: Region): boolean {
+  return region.source?.kind === 'image'
+}
+
+/**
+ * A logo or image layer. Defaults to a modest corner placement and `contain`,
+ * since a logo stretched to fill its slot is never what anyone wants.
+ */
+export function newImageRegion(path: string, fileName: string): Region {
+  return {
+    id: rid(),
+    label: fileName.replace(/\.[^.]+$/, '').slice(0, 24) || 'Image',
+    source: { kind: 'image', path, fileName },
+    src: { x: 0, y: 0, w: 1, h: 1 },
+    dst: { x: 0.06, y: 0.05, w: 0.26, h: 0.1 },
+    // Always contained: a stretched logo is never wanted. No backdrop either —
+    // the slack stays transparent so a PNG's own transparency survives.
+    fit: 'contain'
+  }
+}
 
 export function newRegion(label = 'Box'): Region {
   return {

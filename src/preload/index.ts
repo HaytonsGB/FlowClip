@@ -20,6 +20,8 @@ const api = {
   rescanTools: (): Promise<ToolStatus> => ipcRenderer.invoke('tools:rescan'),
   openVideo: (): Promise<string | null> => ipcRenderer.invoke('dialog:openVideo'),
   probe: (filePath: string): Promise<VideoMeta> => ipcRenderer.invoke('video:probe', filePath),
+  openImage: (): Promise<{ path: string; fileName: string } | null> =>
+    ipcRenderer.invoke('dialog:openImage'),
   filmstrip: (filePath: string, durationSec: number): Promise<string> =>
     ipcRenderer.invoke('video:filmstrip', filePath, durationSec),
   suggestOutput: (inputPath: string): Promise<string> =>
