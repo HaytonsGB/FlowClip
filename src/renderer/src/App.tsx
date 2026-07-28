@@ -47,6 +47,7 @@ import { LayersPanel } from './components/LayersPanel'
 import { OutputPreview } from './components/OutputPreview'
 import { useFit } from './lib/useFit'
 import { useUndo } from './lib/useUndo'
+import { useAudioPreview } from './lib/useAudioPreview'
 import { serialiseProject, type ProjectFile } from '../../shared/project'
 import { ToolRail, type ToolId } from './components/ToolRail'
 import { ToolPanel } from './components/ToolPanel'
@@ -229,6 +230,9 @@ function App(): JSX.Element {
       setRevision((n) => n + 1)
     }
   })
+
+  // Music and effects play alongside the preview, not only in the export.
+  useAudioPreview(audio, projectSec, playing)
 
   const spans = useMemo(() => layoutClips(clips), [clips])
   const total = totalDuration(spans)
