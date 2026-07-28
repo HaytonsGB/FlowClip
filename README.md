@@ -15,8 +15,8 @@ FFmpeg is bundled, so there is nothing else to install. Windows may warn that th
 is unknown — the installer is not code signed. Choose **More info → Run anyway** if you are
 happy to.
 
-> **Early build.** Multi-clip editing, layout compositing and captions work end to end. Music
-> and image overlays are not built yet — see the roadmap.
+> **Early build.** Multi-clip editing, layout compositing, image overlays and captions work end
+> to end. Music is not built yet — see the roadmap.
 
 ## What it does today
 
@@ -36,6 +36,10 @@ and stack them into a 9:16 canvas. Each layer has:
 - **Blurred backdrop** — fitted layers sit on a blurred copy of themselves instead of black bars
 - **Rounded corners and borders**
 - **Reorderable z-order**, snapping to edges and centre lines, and arrow-key nudging
+
+A layer can also draw from **an image instead of the footage** — a logo, watermark or badge.
+Image layers are always contained and never padded or backed, so a transparent PNG stays
+transparent rather than arriving in a black box.
 
 Layout presets solve themselves against the canvas you pick: a stack on 9:16, a larger
 gameplay band on 1:1, and full-screen gameplay with picture-in-picture insets on 16:9.
@@ -64,8 +68,9 @@ opening caption sits on screen before anyone talks.
 | M1.5 | Multi-region layout compositor, packaged installer | ✅ |
 | M2 | Local Whisper captions, styled and editable | ✅ |
 | M3 | Multi-clip timeline, split, undo, project files | ✅ |
-| M4 | Images and logos as layers, music & SFX | ⬜ |
-| M5 | Text, stickers, transitions, effects | ⬜ |
+| M4 | Images and logos as layers | ✅ |
+| M5 | Music and sound effects | ⬜ |
+| M6 | Text, stickers, transitions, effects | ⬜ |
 
 ## Shortcuts
 
