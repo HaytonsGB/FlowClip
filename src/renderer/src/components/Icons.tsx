@@ -208,6 +208,24 @@ export function MarkOutIcon(p: IconProps): JSX.Element {
   )
 }
 
+export function SaveIcon(p: IconProps): JSX.Element {
+  return (
+    <Svg {...p}>
+      <path d="M4.5 4.5h11l4 4v11h-15z" />
+      <path d="M8 4.5v5h7v-5" />
+      <rect x="7.5" y="13" width="9" height="6.5" />
+    </Svg>
+  )
+}
+
+export function FolderIcon(p: IconProps): JSX.Element {
+  return (
+    <Svg {...p}>
+      <path d="M3.5 6.5h5.5l2 2.5h9.5v10h-17z" />
+    </Svg>
+  )
+}
+
 export function UndoIcon(p: IconProps): JSX.Element {
   return (
     <Svg {...p}>

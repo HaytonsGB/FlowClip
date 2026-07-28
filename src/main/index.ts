@@ -12,6 +12,8 @@ import {
   filmstrip
 } from './ffmpeg'
 import { transcribe, downloadModel, isModelReady, whisperPath } from './whisper'
+import { saveProject, loadProject, writeAutosave, readAutosave, clearAutosave } from './project'
+import { PROJECT_EXT, type ProjectFile } from '../shared/project'
 import { MEDIA_SCHEME } from '../shared/types'
 import type {
   ExportRequest,
@@ -220,6 +222,47 @@ function registerIpc(): void {
       }
     }
   )
+
+  ipcMain.handle('project:save', async (_e, project: ProjectFile, existingPath?: string) => {
+    try {
+      let target = existingPath
+      if (!target) {
+        const result = await dialog.showSaveDialog({
+          title: 'Save project',
+          defaultPath: `Untitled.${PROJECT_EXT}`,
+          filters: [{ name: 'FlowClip project', extensions: [PROJECT_EXT] }]
+        })
+        if (result.canceled || !result.filePath) return { ok: false, cancelled: true }
+        target = result.filePath
+      }
+      saveProject(target, project)
+      return { ok: true, path: target }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('project:open', async () => {
+    try {
+      const result = await dialog.showOpenDialog({
+        title: 'Open project',
+        properties: ['openFile'],
+        filters: [{ name: 'FlowClip project', extensions: [PROJECT_EXT] }]
+      })
+      if (result.canceled || !result.filePaths.length) return { ok: false, cancelled: true }
+      const loaded = loadProject(result.filePaths[0])
+      return { ok: true, path: result.filePaths[0], ...loaded }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+
+  ipcMain.handle('project:autosave', (_e, project: ProjectFile) => {
+    writeAutosave(project)
+  })
+
+  ipcMain.handle('project:recovery', () => readAutosave())
+  ipcMain.handle('project:clearRecovery', () => clearAutosave())
 
   ipcMain.handle('shell:revealFile', (_e, filePath: string) => {
     shell.showItemInFolder(filePath)

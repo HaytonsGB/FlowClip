@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
+import type { ProjectFile } from '../shared/project'
 import type {
   VideoMeta,
   ExportRequest,
@@ -31,6 +32,25 @@ const api = {
   exportProject: (req: ProjectExportRequest): Promise<ExportResult> =>
     ipcRenderer.invoke('clip:exportProject', req),
   revealFile: (filePath: string): Promise<void> => ipcRenderer.invoke('shell:revealFile', filePath),
+
+  saveProject: (
+    project: ProjectFile,
+    existingPath?: string
+  ): Promise<{ ok: boolean; path?: string; cancelled?: boolean; error?: string }> =>
+    ipcRenderer.invoke('project:save', project, existingPath),
+  openProject: (): Promise<{
+    ok: boolean
+    path?: string
+    project?: ProjectFile
+    missing?: string[]
+    cancelled?: boolean
+    error?: string
+  }> => ipcRenderer.invoke('project:open'),
+  autosaveProject: (project: ProjectFile): Promise<void> =>
+    ipcRenderer.invoke('project:autosave', project),
+  getRecovery: (): Promise<{ project: ProjectFile; savedAt: string } | null> =>
+    ipcRenderer.invoke('project:recovery'),
+  clearRecovery: (): Promise<void> => ipcRenderer.invoke('project:clearRecovery'),
 
   /** Electron 33 removed File.path; this is the supported replacement. */
   pathForFile: (file: File): string => webUtils.getPathForFile(file),

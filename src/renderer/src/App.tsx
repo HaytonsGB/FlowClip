@@ -42,6 +42,7 @@ import { LayersPanel } from './components/LayersPanel'
 import { OutputPreview } from './components/OutputPreview'
 import { useFit } from './lib/useFit'
 import { useUndo } from './lib/useUndo'
+import { serialiseProject, type ProjectFile } from '../../shared/project'
 import { ToolRail, type ToolId } from './components/ToolRail'
 import { ToolPanel } from './components/ToolPanel'
 import {
@@ -50,7 +51,9 @@ import {
   ExportIcon,
   ScissorsIcon,
   UndoIcon,
-  RedoIcon
+  RedoIcon,
+  SaveIcon,
+  FolderIcon
 } from './components/Icons'
 import { formatBytes, formatTime, clamp } from './lib/format'
 import markUrl from './assets/mark.png'
@@ -59,6 +62,7 @@ type Status =
   | { kind: 'idle' }
   | { kind: 'exporting'; percent: number; speed: string }
   | { kind: 'done'; path: string }
+  | { kind: 'saved'; path: string }
   | { kind: 'error'; message: string }
 
 /**
@@ -103,6 +107,12 @@ function App(): JSX.Element {
   const [modelId, setModelId] = useState<WhisperModelId>('base.en')
   const [modelReady, setModelReady] = useState(false)
   const [capJob, setCapJob] = useState<CaptionJob>({ kind: 'idle' })
+  /** Where the project was last saved, so Ctrl+S can save in place. */
+  const [projectPath, setProjectPath] = useState<string | null>(null)
+  const [dirty, setDirty] = useState(false)
+  const [recovery, setRecovery] = useState<{ project: ProjectFile; savedAt: string } | null>(
+    null
+  )
   /** Bumped on any region edit so the paused canvas preview repaints. */
   const [revision, setRevision] = useState(0)
   const pictureRef = useRef<HTMLDivElement>(null)
@@ -134,6 +144,64 @@ function App(): JSX.Element {
       )
     }
   }
+
+  /** Applies a loaded project, replacing whatever is open. */
+  const adoptProject = useCallback((p: ProjectFile, path: string | null) => {
+    setClips(p.clips)
+    setAspect(p.aspect ?? 'vertical')
+    if (p.captionStyle) setCapStyle(p.captionStyle)
+    setActiveId(p.clips[0]?.id ?? null)
+    setSelectedRegion(null)
+    setProjectSec(0)
+    setProjectPath(path)
+    setDirty(false)
+    setRevision((n) => n + 1)
+
+    // Filmstrips are derived, not stored — rebuild them in the background.
+    for (const c of p.clips) {
+      window.api
+        .filmstrip(c.meta.path, c.meta.durationSec)
+        .then((strip) => setStrips((s) => ({ ...s, [c.id]: mediaUrl(strip) })))
+        .catch(() => undefined)
+    }
+  }, [])
+
+  const saveProjectAs = useCallback(
+    async (forceDialog = false) => {
+      if (!clips.length) return
+      const res = await window.api.saveProject(
+        serialiseProject(clips, aspect, capStyle),
+        forceDialog ? undefined : (projectPath ?? undefined)
+      )
+      if (res.cancelled) return
+      if (res.ok && res.path) {
+        setProjectPath(res.path)
+        setDirty(false)
+        setStatus({ kind: 'saved', path: res.path })
+      } else if (res.error) {
+        setStatus({ kind: 'error', message: res.error })
+      }
+    },
+    [clips, aspect, capStyle, projectPath]
+  )
+
+  const openProject = useCallback(async () => {
+    const res = await window.api.openProject()
+    if (res.cancelled) return
+    if (!res.ok || !res.project) {
+      if (res.error) setStatus({ kind: 'error', message: res.error })
+      return
+    }
+    adoptProject(res.project, res.path ?? null)
+    if (res.missing?.length) {
+      setStatus({
+        kind: 'error',
+        message: `Opened, but ${res.missing.length} source file${
+          res.missing.length === 1 ? '' : 's'
+        } could not be found:\n${res.missing.join('\n')}`
+      })
+    }
+  }, [adoptProject])
 
   /** Undo covers the clips — trims, layouts and captions all live on them. */
   const { undo, redo, canUndo, canRedo } = useUndo<Clip[]>({
@@ -204,7 +272,23 @@ function App(): JSX.Element {
 
   useEffect(() => {
     window.api.toolStatus().then(setTools)
+    // Offer whatever the last session left behind, rather than restoring it
+    // silently over what the user might be about to open.
+    window.api.getRecovery().then(setRecovery)
   }, [])
+
+  /**
+   * Autosave, so a crash or a closed window does not cost the edit. Throttled
+   * because it fires on every trim and caption change.
+   */
+  useEffect(() => {
+    if (!clips.length) return
+    setDirty(true)
+    const t = setTimeout(() => {
+      window.api.autosaveProject(serialiseProject(clips, aspect, capStyle))
+    }, 1500)
+    return () => clearTimeout(t)
+  }, [clips, aspect, capStyle])
 
   useEffect(() => {
     return window.api.onExportProgress((p: ExportProgress) => {
@@ -495,6 +579,16 @@ function App(): JSX.Element {
         redo()
         return
       }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault()
+        void saveProjectAs(e.shiftKey)
+        return
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'o') {
+        e.preventDefault()
+        void openProject()
+        return
+      }
       if (e.ctrlKey || e.metaKey) return
 
       if (e.code === 'Space') {
@@ -546,7 +640,9 @@ function App(): JSX.Element {
     updateRegion,
     splitAtPlayhead,
     undo,
-    redo
+    redo,
+    saveProjectAs,
+    openProject
   ])
 
   const missingTools = tools && !tools.ready
@@ -754,8 +850,25 @@ function App(): JSX.Element {
           <span className="brand-name">FlowClip</span>
         </div>
         <div className="topbar-actions">
+          {clips.length > 0 && (
+            <span className="project-name" title={projectPath ?? 'Not saved yet'}>
+              {projectPath ? projectPath.split(/[\\/]/).pop() : 'Untitled project'}
+              {dirty && <b className="dot" title="Unsaved changes" />}
+            </span>
+          )}
+          <button className="btn" onClick={openProject} title="Open a project (Ctrl+O)">
+            <FolderIcon size={15} /> Open
+          </button>
+          <button
+            className="btn"
+            onClick={() => saveProjectAs(false)}
+            disabled={!clips.length}
+            title="Save the project (Ctrl+S)"
+          >
+            <SaveIcon size={15} /> Save
+          </button>
           <button className="btn" onClick={openFile}>
-            Open video
+            Add video
           </button>
         </div>
       </header>
@@ -771,6 +884,36 @@ function App(): JSX.Element {
             re-check
           </button>
           .
+        </div>
+      )}
+
+      {recovery && clips.length === 0 && (
+        <div className="banner warn recovery">
+          <span>
+            FlowClip closed with an unsaved project — {recovery.project.clips.length} clip
+            {recovery.project.clips.length === 1 ? '' : 's'} from{' '}
+            {new Date(recovery.savedAt).toLocaleString()}.
+          </span>
+          <span className="recovery-actions">
+            <button
+              className="btn small primary"
+              onClick={() => {
+                adoptProject(recovery.project, null)
+                setRecovery(null)
+              }}
+            >
+              Restore it
+            </button>
+            <button
+              className="btn small ghost"
+              onClick={() => {
+                void window.api.clearRecovery()
+                setRecovery(null)
+              }}
+            >
+              Discard
+            </button>
+          </span>
         </div>
       )}
 
@@ -1074,6 +1217,14 @@ function App(): JSX.Element {
             {status.kind === 'done' && (
               <div className="banner ok">
                 Exported. <button className="link" onClick={() => window.api.revealFile(status.path)}>
+                  Show in folder
+                </button>
+              </div>
+            )}
+            {status.kind === 'saved' && (
+              <div className="banner ok">
+                Project saved.{' '}
+                <button className="link" onClick={() => window.api.revealFile(status.path)}>
                   Show in folder
                 </button>
               </div>
