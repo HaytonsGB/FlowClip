@@ -127,22 +127,29 @@ function App(): JSX.Element {
    */
   const active = clips.find((c) => c.id === activeId) ?? null
 
+  /**
+   * Which clip edits apply to, held in a ref so the writers below never capture
+   * it. They are handed to memoised callbacks, and a closed-over id goes stale
+   * the moment the selection changes — silently, because a write against a stale
+   * id simply matches no clip and does nothing.
+   */
+  const activeIdRef = useRef<string | null>(null)
+  activeIdRef.current = activeId
+
+  const patchClip = useCallback((fn: (clip: Clip) => Clip) => {
+    setClips((cs) => cs.map((c) => (c.id === activeIdRef.current ? fn(c) : c)))
+  }, [])
+
   /** Setter shim supporting both a value and an updater, like useState. */
   function makeSetter<K extends keyof Clip>(key: K) {
     return (value: Clip[K] | ((prev: Clip[K]) => Clip[K])): void => {
-      setClips((cs) =>
-        cs.map((c) =>
-          c.id === activeId
-            ? {
-                ...c,
-                [key]:
-                  typeof value === 'function'
-                    ? (value as (prev: Clip[K]) => Clip[K])(c[key])
-                    : value
-              }
-            : c
-        )
-      )
+      patchClip((c) => ({
+        ...c,
+        [key]:
+          typeof value === 'function'
+            ? (value as (prev: Clip[K]) => Clip[K])(c[key])
+            : value
+      }))
     }
   }
 
