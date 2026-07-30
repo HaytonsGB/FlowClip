@@ -224,9 +224,11 @@ export function ProjectTimeline({
               </div>
             )
           })}
-
-          <div className="trimbar-playhead" style={{ left: pct(projectSec) }} />
         </div>
+
+        {/* Outside the track on purpose: the track clips its overflow, which ate
+            the marker head and left only a hairline over a bright filmstrip. */}
+        <div className="trimbar-playhead" style={{ left: pct(projectSec) }} />
       </div>
 
       <div className="trimbar-labels">
