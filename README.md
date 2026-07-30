@@ -15,8 +15,8 @@ FFmpeg is bundled, so there is nothing else to install. Windows may warn that th
 is unknown — the installer is not code signed. Choose **More info → Run anyway** if you are
 happy to.
 
-> **Early build.** Multi-clip editing, layout compositing, image overlays, captions and music
-> all work end to end. Text and stickers are not built yet — see the roadmap.
+> **Early build.** Multi-clip editing, layout compositing, image overlays, captions, music,
+> text and colour all work end to end. Stickers and transitions are not built yet.
 
 ## What it does today
 
@@ -66,6 +66,15 @@ rather than stopping at the end of whichever clip owned it, and the video stream
 through that pass so nothing is re-encoded. Everything plays in the preview too, since a mix
 you cannot hear is a mix you cannot judge.
 
+**Text** — hooks, punchlines and labels, each with its own time range and dragged into place on
+the output. Outlined or on a filled panel, in whichever font and colour. Text is timed against
+the finished piece rather than a clip, so a hook can run across a cut.
+
+**Adjust** — every audio level in one place, so a clip can be balanced against its music
+instead of guessing from two separate panels. Plus per-clip colour: five looks, or brightness,
+contrast and saturation by hand. Deliberately limited to what maps onto both FFmpeg's `eq`
+filter and a canvas filter, so the preview cannot drift from the export.
+
 ## Roadmap
 
 | Milestone | What lands | Status |
@@ -76,7 +85,8 @@ you cannot hear is a mix you cannot judge.
 | M3 | Multi-clip timeline, split, undo, project files | ✅ |
 | M4 | Images and logos as layers | ✅ |
 | M5 | Music and sound effects | ✅ |
-| M6 | Text, stickers, transitions, colour | ⬜ |
+| M6 | Text overlays, per-clip audio and colour | ✅ |
+| M7 | Stickers, transitions, effects | ⬜ |
 
 ## Shortcuts
 
