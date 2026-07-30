@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Region, Rect, CaptionWord, CaptionStyle } from '../../../shared/types'
+import type { Region, Rect, CaptionWord, CaptionStyle, ColourAdjust } from '../../../shared/types'
 import { mediaUrl } from '../../../shared/types'
 import { groupIntoLines, wordWindows } from '../../../shared/captions'
 
@@ -11,6 +11,8 @@ interface Props {
   revision: number
   words?: CaptionWord[]
   captionStyle?: CaptionStyle
+  /** Grade for the active clip, applied to the footage only. */
+  colour?: ColourAdjust
 }
 
 /**
@@ -94,7 +96,8 @@ export function OutputPreview({
   canvas,
   revision,
   words,
-  captionStyle
+  captionStyle,
+  colour
 }: Props): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   /** Decoded image layers, kept across frames so the draw loop stays cheap. */
@@ -129,7 +132,17 @@ export function OutputPreview({
       const vw = video.videoWidth
       const vh = video.videoHeight
       if (vw && vh) {
+        // Mirrors ffmpeg's eq filter. Its brightness is an offset in -1..1 while
+        // the canvas filter is a multiplier around 1, hence the conversion.
+        // Re-applied per layer, since an image layer clears it.
+        const grade = colour
+          ? `brightness(${(1 + colour.brightness).toFixed(3)}) ` +
+            `contrast(${colour.contrast.toFixed(3)}) ` +
+            `saturate(${colour.saturation.toFixed(3)})`
+          : 'none'
+
         for (const region of regions) {
+          ctx.filter = grade
           const dx = region.dst.x * canvas.w
           const dy = region.dst.y * canvas.h
           const dw = region.dst.w * canvas.w
@@ -143,6 +156,7 @@ export function OutputPreview({
           // Image layers are contained and overlaid as-is, never padded or
           // backed, so a transparent PNG stays transparent.
           if (region.source?.kind === 'image') {
+            ctx.filter = 'none'
             const img = images.current.get(region.source.path)
             if (img?.complete && img.naturalWidth > 0) {
               const scale = Math.min(dw / img.naturalWidth, dh / img.naturalHeight)
@@ -213,6 +227,10 @@ export function OutputPreview({
         }
       }
 
+      // Captions and image layers are drawn ungraded — the grade belongs to the
+      // footage, not to text laid over it.
+      ctx.filter = 'none'
+
       if (words?.length && captionStyle) {
         drawCaptions(ctx, canvas, words, captionStyle, video.currentTime)
       }
@@ -231,6 +249,7 @@ export function OutputPreview({
     revision,
     words,
     captionStyle,
+    colour,
     imagesReady
   ])
 

@@ -19,7 +19,7 @@ import type {
   AudioTrack,
   Rect
 } from '../shared/types'
-import { ASPECT_DIMS, isImageLayer } from '../shared/types'
+import { ASPECT_DIMS, isImageLayer, isNeutralColour } from '../shared/types'
 import type { Region } from '../shared/types'
 import { writeAss, escapeFilterPath } from './captions'
 
@@ -285,6 +285,14 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
     return nextInput++
   }
 
+  // The grade applies to the whole clip, so it goes on once before the split
+  // rather than being repeated on every layer.
+  const grade = isNeutralColour(req.colour)
+    ? 'null'
+    : `eq=brightness=${(req.colour?.brightness ?? 0).toFixed(3)}` +
+      `:contrast=${(req.colour?.contrast ?? 1).toFixed(3)}` +
+      `:saturation=${(req.colour?.saturation ?? 1).toFixed(3)}`
+
   // Image layers draw from their own input, so only video layers are split off
   // the source; ffmpeg cannot consume one stream twice.
   const videoRegions = regions.filter((r) => !isImageLayer(r))
@@ -292,8 +300,8 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
     const labels = videoRegions.map((r) => `[s_${r.id}]`).join('')
     steps.push(
       videoRegions.length === 1
-        ? `[0:v]null${labels}`
-        : `[0:v]split=${videoRegions.length}${labels}`
+        ? `[0:v]${grade}${labels}`
+        : `[0:v]${grade},split=${videoRegions.length}${labels}`
     )
   }
 
@@ -401,16 +409,22 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
     : -1
   const audioMap = needSilence ? ['-map', `${silenceIndex}:a`] : ['-map', '0:a?']
 
+  const audioFilters: string[] = []
+
   /**
    * Mono needs duplicating into both channels, not spreading across them.
    * `-ac 2` distributes the energy and costs exactly 3 dB — measured: a mono
    * source at -21.1 dB came out at -24.1 dB. `pan` copies it instead, so the
    * level survives.
    */
-  const monoFix =
-    forJoin && !needSilence && req.audioChannels === 1
-      ? ['-af', 'pan=stereo|c0=c0|c1=c0']
-      : []
+  if (forJoin && !needSilence && req.audioChannels === 1) {
+    audioFilters.push('pan=stereo|c0=c0|c1=c0')
+  }
+  // The clip's own level, set against any music laid over it later.
+  if (req.volume !== undefined && req.volume !== 1 && !needSilence) {
+    audioFilters.push(`volume=${req.volume.toFixed(3)}`)
+  }
+  const audioFilterArgs = audioFilters.length ? ['-af', audioFilters.join(',')] : []
 
   if (forJoin) {
     steps.push(`${finalLabel}fps=${req.fps}[out]`)
@@ -434,7 +448,7 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
     ...(forJoin ? ['-r', String(req.fps), '-video_track_timescale', '90000'] : []),
     '-c:a', 'aac',
     '-b:a', '192k',
-    ...monoFix,
+    ...audioFilterArgs,
     ...(forJoin ? ['-ar', '48000', '-ac', '2'] : []),
     '-movflags', '+faststart',
     req.outputPath
@@ -610,7 +624,9 @@ export async function runProjectExport(
         captions: seg.captions,
         fps: req.fps,
         hasAudio: seg.hasAudio,
-        audioChannels: seg.audioChannels
+        audioChannels: seg.audioChannels,
+        volume: seg.volume,
+        colour: seg.colour
       })
 
       const base = done

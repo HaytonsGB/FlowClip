@@ -3,12 +3,21 @@ import {
   LayersIcon,
   CaptionsIcon,
   MusicIcon,
+  AdjustIcon,
   TextIcon,
   StickerIcon,
   EffectsIcon
 } from './Icons'
 
-export type ToolId = 'trim' | 'layout' | 'captions' | 'audio' | 'text' | 'stickers' | 'effects'
+export type ToolId =
+  | 'trim'
+  | 'layout'
+  | 'captions'
+  | 'audio'
+  | 'adjust'
+  | 'text'
+  | 'stickers'
+  | 'effects'
 
 export interface Tool {
   id: ToolId
@@ -23,6 +32,7 @@ export const TOOLS: Tool[] = [
   { id: 'layout', label: 'Layout', icon: LayersIcon },
   { id: 'captions', label: 'Captions', icon: CaptionsIcon },
   { id: 'audio', label: 'Music', icon: MusicIcon },
+  { id: 'adjust', label: 'Adjust', icon: AdjustIcon },
   { id: 'text', label: 'Text', icon: TextIcon, milestone: 'M4' },
   { id: 'stickers', label: 'Stickers', icon: StickerIcon, milestone: 'M4' },
   { id: 'effects', label: 'Effects', icon: EffectsIcon, milestone: 'M5' }

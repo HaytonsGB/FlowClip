@@ -1493,6 +1493,30 @@ body {
   color: var(--danger);
 }
 
+/* ---------- adjust ---------- */
+.mini-field.wide {
+  flex: 1;
+  max-width: 260px;
+}
+
+.mini-field.wide input[type='range'] {
+  flex: 1;
+  width: auto;
+}
+
+.panel-hint.inline {
+  margin: 0;
+  flex: 1;
+}
+
+.graded-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--magenta);
+  box-shadow: 0 0 8px rgba(244, 114, 230, 0.8);
+}
+
 /* ---------- music & effects ---------- */
 .audio-list {
   display: flex;

@@ -55,6 +55,18 @@ export function LayersIcon(p: IconProps): JSX.Element {
   )
 }
 
+export function AdjustIcon(p: IconProps): JSX.Element {
+  return (
+    <Svg {...p}>
+      <line x1="4" y1="7" x2="20" y2="7" />
+      <circle cx="9" cy="7" r="2.4" />
+      <line x1="4" y1="14.5" x2="20" y2="14.5" />
+      <circle cx="15.5" cy="14.5" r="2.4" />
+      <line x1="4" y1="21" x2="20" y2="21" />
+    </Svg>
+  )
+}
+
 export function ImageIcon(p: IconProps): JSX.Element {
   return (
     <Svg {...p}>

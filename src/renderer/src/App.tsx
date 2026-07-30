@@ -26,6 +26,7 @@ import {
   splitClip,
   canSplit,
   projectFps,
+  NEUTRAL_COLOUR,
   defaultCaptionStyle,
   CAPTION_PRESETS
 } from '../../shared/types'
@@ -33,6 +34,7 @@ import { CaptionsPanel, type CaptionJob } from './components/CaptionsPanel'
 import { TranscriptPanel } from './components/TranscriptPanel'
 import { CaptionHandle } from './components/CaptionHandle'
 import { MusicPanel } from './components/MusicPanel'
+import { AdjustPanel } from './components/AdjustPanel'
 import { retimeLine, replaceLine, insertCaption } from '../../shared/captions'
 import {
   layoutClips,
@@ -234,6 +236,7 @@ function App(): JSX.Element {
   // Music and effects play alongside the preview, not only in the export.
   useAudioPreview(audio, projectSec, playing)
 
+
   const spans = useMemo(() => layoutClips(clips), [clips])
   const total = totalDuration(spans)
   /** Clip-local playhead, still what the tools and caption preview expect. */
@@ -247,6 +250,8 @@ function App(): JSX.Element {
   const outSec = active?.outSec ?? 0
   const regions = active?.regions ?? []
   const words = active?.words ?? []
+  const clipVolume = active?.volume ?? 1
+  const clipColour = active?.colour ?? NEUTRAL_COLOUR
   const activePreset = active?.activePreset ?? null
   const presetDirty = active?.presetDirty ?? false
 
@@ -256,6 +261,17 @@ function App(): JSX.Element {
   const setWords = makeSetter('words')
   const setActivePreset = makeSetter('activePreset')
   const setPresetDirty = makeSetter('presetDirty')
+  const setClipVolume = makeSetter('volume')
+  const setClipColour = makeSetter('colour')
+
+  /**
+   * The clip's own level in the preview, so what you hear against the music is
+   * what the export mixes. Media elements cap at 1, so a clip pushed above 100%
+   * is louder in the file than it sounds here.
+   */
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.volume = Math.max(0, Math.min(1, clipVolume))
+  }, [clipVolume, activeId])
 
   /** null on 'source', which means "no compositing, just trim". */
   const canvasDims = aspect === 'source' ? null : ASPECT_DIMS[aspect]
@@ -552,6 +568,8 @@ function App(): JSX.Element {
           srcHeight: c.meta.height,
           hasAudio: c.meta.hasAudio,
           audioChannels: c.meta.audioChannels,
+          volume: c.volume,
+          colour: c.colour,
           captions: trackFor(c)
         }))
       })
@@ -1077,6 +1095,7 @@ function App(): JSX.Element {
                     revision={revision}
                     words={words}
                     captionStyle={capStyle}
+                    colour={clipColour}
                   />
                   {tool === 'captions' && words.length > 0 && (
                     <CaptionHandle
@@ -1215,7 +1234,19 @@ function App(): JSX.Element {
             />
 
             <div className="row">
-              {tool === 'audio' ? (
+              {tool === 'adjust' ? (
+                <AdjustPanel
+                  volume={clipVolume}
+                  colour={clipColour}
+                  hasAudio={Boolean(meta.hasAudio)}
+                  onVolume={setClipVolume}
+                  onColour={(patch) => setClipColour({ ...clipColour, ...patch })}
+                  onReset={() => {
+                    setClipVolume(1)
+                    setClipColour({ ...NEUTRAL_COLOUR })
+                  }}
+                />
+              ) : tool === 'audio' ? (
                 <MusicPanel
                   tracks={audio}
                   projectSec={projectSec}

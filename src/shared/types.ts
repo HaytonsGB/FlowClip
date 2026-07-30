@@ -410,6 +410,32 @@ export interface ModelProgress {
  * pieces of footage rarely want the same crop — a facecam sits in a different
  * corner in every recording.
  */
+/**
+ * Colour grade applied to a whole clip.
+ *
+ * Deliberately limited to what maps cleanly onto both ffmpeg's `eq` filter and
+ * a canvas filter, so the preview and the export cannot disagree.
+ */
+export interface ColourAdjust {
+  /** -1..1, 0 = unchanged. */
+  brightness: number
+  /** 0..2, 1 = unchanged. */
+  contrast: number
+  /** 0..2, 1 = unchanged. */
+  saturation: number
+}
+
+export const NEUTRAL_COLOUR: ColourAdjust = {
+  brightness: 0,
+  contrast: 1,
+  saturation: 1
+}
+
+export function isNeutralColour(c: ColourAdjust | undefined): boolean {
+  if (!c) return true
+  return c.brightness === 0 && c.contrast === 1 && c.saturation === 1
+}
+
 export interface Clip {
   id: string
   meta: VideoMeta
@@ -417,6 +443,9 @@ export interface Clip {
   outSec: number
   regions: Region[]
   words: CaptionWord[]
+  /** This clip's own audio level. 1 = unchanged. */
+  volume?: number
+  colour?: ColourAdjust
   /** Preset the layout came from, and whether it has since been edited. */
   activePreset: string | null
   presetDirty: boolean
@@ -432,6 +461,8 @@ export function newClip(meta: VideoMeta): Clip {
     outSec: meta.durationSec,
     regions: [],
     words: [],
+    volume: 1,
+    colour: { ...NEUTRAL_COLOUR },
     activePreset: null,
     presetDirty: false
   }
@@ -547,6 +578,8 @@ export interface ProjectSegment {
   hasAudio: boolean
   /** Mono is upmixed with care; a plain conversion to stereo costs 3 dB. */
   audioChannels: number
+  volume?: number
+  colour?: ColourAdjust
   captions?: CaptionTrack
 }
 
@@ -587,6 +620,9 @@ export interface CompositeExportRequest {
   hasAudio?: boolean
   /** Source channel count, so mono can be upmixed without losing 3 dB. */
   audioChannels?: number
+  /** The clip's own audio level. 1 = unchanged. */
+  volume?: number
+  colour?: ColourAdjust
 }
 
 export interface ExportRequest {
