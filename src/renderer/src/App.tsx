@@ -275,8 +275,12 @@ function App(): JSX.Element {
 
   /** null on 'source', which means "no compositing, just trim". */
   const canvasDims = aspect === 'source' ? null : ASPECT_DIMS[aspect]
-  /** Tools that need the composed output pane beside the source. */
-  const showComposite = tool === 'layout' || tool === 'captions'
+  /**
+   * Tools that need the composed output beside the source. Anything that
+   * changes what the frame looks like belongs here — grading without seeing
+   * the result is guesswork.
+   */
+  const showComposite = tool === 'layout' || tool === 'captions' || tool === 'adjust'
   /** Region boxes are only draggable in Layout; elsewhere they would be noise. */
   const editRegions = tool === 'layout'
 
