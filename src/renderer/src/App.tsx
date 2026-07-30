@@ -426,20 +426,30 @@ function App(): JSX.Element {
 
       // Deleting shifts every later clip earlier, so the playhead has to be put
       // somewhere deliberate or it keeps pointing at footage that has moved out
-      // from under it. It lands on whatever now fills the gap — the clip that
-      // took the deleted one's place, or the new last clip if it was the end.
-      // That is what "delete the bit I don't want" should feel like: the next
-      // thing to play is the next thing you see.
+      // from under it.
       const spansAfter = layoutClips(next)
-      const target = spansAfter[Math.min(gone, spansAfter.length - 1)] ?? null
+      const survivor = spansAfter.find((s) => s.clip.id === activeId) ?? null
 
-      setActiveId(target?.clip.id ?? null)
-      // The element only reloads when its file changes, and after a split the
-      // two halves share one file — so without an explicit seek it carries on
-      // playing the exact range that was just deleted.
-      pendingSeek.current = target ? target.clip.inSec : null
-      setProjectSec(target ? target.start : 0)
-      setSelectedRegion(null)
+      if (survivor) {
+        // Still editing a clip that exists, so hold that position and let the
+        // playhead ride along with it. Moving the selection here would drag you
+        // off the clip you were working on just because you tidied up elsewhere.
+        const before = spanOf(spans, survivor.clip.id)
+        setProjectSec(survivor.start + (before ? projectSec - before.start : 0))
+      } else {
+        // The clip being edited has gone. Land on whatever fills the gap — the
+        // clip that took its place, or the new last one if the end was removed.
+        // That is what "delete the bit I don't want" should feel like: the next
+        // thing to play is the next thing you see.
+        const target = spansAfter[Math.min(gone, spansAfter.length - 1)] ?? null
+        setActiveId(target?.clip.id ?? null)
+        // The element only reloads when its file changes, and after a split the
+        // two halves share one file — so without an explicit seek it carries on
+        // playing the exact range that was just deleted.
+        pendingSeek.current = target ? target.clip.inSec : null
+        setProjectSec(target ? target.start : 0)
+        setSelectedRegion(null)
+      }
 
       setStrips((s) => {
         const rest = { ...s }
@@ -447,7 +457,7 @@ function App(): JSX.Element {
         return rest
       })
     },
-    [clips]
+    [clips, activeId, projectSec, spans]
   )
 
   /** Cuts the clip under the playhead in two, keeping the playhead where it is. */
