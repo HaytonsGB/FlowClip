@@ -69,6 +69,27 @@ export function ProjectTimeline({
   )
 
   /**
+   * Scrubbing: seek on press, then follow the pointer until release.
+   *
+   * Listeners go on the window rather than the track so the scrub survives the
+   * pointer leaving the timeline, which it does constantly when dragging near
+   * either end.
+   */
+  const startScrub = useCallback(
+    (e: React.PointerEvent): void => {
+      onSeek(secAtClientX(e.clientX))
+      const move = (ev: PointerEvent): void => onSeek(secAtClientX(ev.clientX))
+      const up = (): void => {
+        window.removeEventListener('pointermove', move)
+        window.removeEventListener('pointerup', up)
+      }
+      window.addEventListener('pointermove', move)
+      window.addEventListener('pointerup', up)
+    },
+    [onSeek, secAtClientX]
+  )
+
+  /**
    * Dragging an edge changes that clip's trim. Movement is converted through the
    * project scale, so a drag covers the same distance on screen regardless of
    * how long the clip is.
@@ -125,7 +146,7 @@ export function ProjectTimeline({
         <div
           className="trimbar-track project"
           ref={trackRef}
-          onPointerDown={(e) => onSeek(secAtClientX(e.clientX))}
+          onPointerDown={startScrub}
         >
           {spans.map((span) => {
             const isActive = span.clip.id === activeId
@@ -152,7 +173,7 @@ export function ProjectTimeline({
                 onPointerDown={(e) => {
                   e.stopPropagation()
                   onSelect(span.clip.id)
-                  onSeek(secAtClientX(e.clientX))
+                  startScrub(e)
                 }}
                 title={span.clip.meta.fileName}
               >
