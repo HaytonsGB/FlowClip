@@ -289,6 +289,24 @@ function App(): JSX.Element {
     if (videoRef.current) videoRef.current.volume = Math.max(0, Math.min(1, clipVolume))
   }, [clipVolume, activeId])
 
+  /**
+   * Keeps the element inside the active clip's trim.
+   *
+   * Deleting, trimming or undoing can leave it parked outside that range, and
+   * because two clips often share one source file the src does not change — so
+   * nothing reloads and nothing re-seeks. It would happily play footage that is
+   * no longer part of the project.
+   */
+  useEffect(() => {
+    const v = videoRef.current
+    if (!v || !active || pendingSeek.current !== null) return
+    if (v.currentTime < active.inSec - 0.05 || v.currentTime > active.outSec + 0.05) {
+      v.currentTime = active.inSec
+      const span = spanOf(spans, active.id)
+      if (span) setProjectSec(span.start)
+    }
+  }, [activeId, active?.inSec, active?.outSec, spans, active])
+
   /** Preview plays at the clip's rate, so timings feel like the export. */
   useEffect(() => {
     if (videoRef.current) videoRef.current.playbackRate = Math.max(0.0625, Math.min(16, clipSpeedValue))
@@ -403,7 +421,15 @@ function App(): JSX.Element {
     (id: string) => {
       setClips((cs) => {
         const next = cs.filter((c) => c.id !== id)
-        if (id === activeId) setActiveId(next[0]?.id ?? null)
+        if (id === activeId) {
+          const replacement = next[0] ?? null
+          setActiveId(replacement?.id ?? null)
+          // Park the playhead at the start of whatever survives, or the element
+          // keeps playing from wherever it was — which is inside the range that
+          // was just deleted.
+          if (replacement) pendingSeek.current = replacement.inSec
+          setProjectSec(0)
+        }
         return next
       })
       setStrips((s) => {
