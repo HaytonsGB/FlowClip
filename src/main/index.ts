@@ -1,6 +1,8 @@
-import { app, shell, BrowserWindow, ipcMain, dialog, protocol, net } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, protocol } from 'electron'
 import { join, basename, extname, dirname } from 'path'
-import { pathToFileURL } from 'url'
+import { createReadStream } from 'fs'
+import { stat } from 'fs/promises'
+import { Readable } from 'stream'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import {
   probe,
@@ -37,8 +39,9 @@ function resourcePath(name: string): string {
 
 /**
  * The renderer runs on http:// in dev, so it cannot load file:// media directly.
- * This privileged scheme streams local files instead. `stream: true` is what makes
- * range requests — and therefore seeking within a video — work.
+ * This privileged scheme streams local files instead. `stream: true` allows a
+ * streaming response body; serving byte ranges — and therefore seeking — is the
+ * handler's job, see registerMediaProtocol.
  */
 protocol.registerSchemesAsPrivileged([
   {
@@ -94,8 +97,52 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
 })
 
+const MEDIA_TYPES: Record<string, string> = {
+  '.mp4': 'video/mp4',
+  '.m4v': 'video/mp4',
+  '.mov': 'video/quicktime',
+  '.mkv': 'video/x-matroska',
+  '.webm': 'video/webm',
+  '.avi': 'video/x-msvideo',
+  '.flv': 'video/x-flv',
+  '.wmv': 'video/x-ms-wmv',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.m4a': 'audio/mp4',
+  '.aac': 'audio/aac',
+  '.ogg': 'audio/ogg',
+  '.opus': 'audio/ogg',
+  '.flac': 'audio/flac',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.gif': 'image/gif'
+}
+
+/** `bytes=start-end`, either end optional. Null when unparseable or unsatisfiable. */
+function parseRange(header: string, size: number): { start: number; end: number } | null {
+  const m = /^bytes=(\d*)-(\d*)$/.exec(header.trim())
+  if (!m || (!m[1] && !m[2])) return null
+
+  let start: number
+  let end: number
+  if (!m[1]) {
+    // Suffix form: the last N bytes, which is how players read an MP4's trailing
+    // moov atom before they can seek at all.
+    const n = parseInt(m[2], 10)
+    start = Math.max(0, size - n)
+    end = size - 1
+  } else {
+    start = parseInt(m[1], 10)
+    end = m[2] ? Math.min(parseInt(m[2], 10), size - 1) : size - 1
+  }
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end || start >= size) return null
+  return { start, end }
+}
+
 /**
- * Serves `flowclip://media/?src=<encoded absolute path>`.
+ * Serves `flowclip://media/?src=<encoded absolute path>`, with byte ranges.
  *
  * The path travels as a query param rather than in the URL path: standard schemes
  * canonicalise pathnames, which mangles Windows drive letters and backslashes.
@@ -105,7 +152,48 @@ function registerMediaProtocol(): void {
     try {
       const src = new URL(request.url).searchParams.get('src')
       if (!src) return new Response('missing src', { status: 400 })
-      return await net.fetch(pathToFileURL(src).toString(), { headers: request.headers })
+
+      const size = (await stat(src)).size
+      const type = MEDIA_TYPES[extname(src).toLowerCase()] ?? 'application/octet-stream'
+      const rangeHeader = request.headers.get('Range')
+
+      // Seeking a video *is* a byte-range request. net.fetch on a file:// URL
+      // ignores Range and always returns the whole file, so Chromium reported
+      // the media as unseekable (seekable = [0,0]) and silently dropped every
+      // currentTime write — the playhead snapped back to zero on every scrub.
+      if (rangeHeader) {
+        const range = parseRange(rangeHeader, size)
+        if (!range) {
+          return new Response(null, {
+            status: 416,
+            headers: { 'Content-Range': `bytes */${size}`, 'Accept-Ranges': 'bytes' }
+          })
+        }
+        const body = Readable.toWeb(
+          createReadStream(src, { start: range.start, end: range.end })
+        ) as ReadableStream<Uint8Array>
+        return new Response(body, {
+          status: 206,
+          headers: {
+            'Content-Type': type,
+            'Content-Length': String(range.end - range.start + 1),
+            'Content-Range': `bytes ${range.start}-${range.end}/${size}`,
+            'Accept-Ranges': 'bytes'
+          }
+        })
+      }
+
+      // Advertise range support on the first response too, or the player never
+      // asks for one.
+      const body = Readable.toWeb(createReadStream(src)) as ReadableStream<Uint8Array>
+      return new Response(body, {
+        status: 200,
+        headers: {
+          'Content-Type': type,
+          'Content-Length': String(size),
+          'Accept-Ranges': 'bytes'
+        }
+      })
     } catch (err) {
       return new Response(err instanceof Error ? err.message : 'media error', { status: 404 })
     }

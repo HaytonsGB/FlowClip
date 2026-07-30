@@ -532,7 +532,14 @@ function App(): JSX.Element {
     if (!v) return
     if (v.paused) {
       // Restart from the top if the playhead is sitting at the very end.
-      if (projectSec >= total - 0.05) seekProject(0)
+      //
+      // `v.ended` has to be checked as well as the playhead. Calling play() on
+      // an element that has ended makes it rewind to the start of the *file*,
+      // and after a split that is footage deliberately cut — so the position
+      // must be decided here rather than left to the element. The playhead
+      // alone is not enough: a clip running to its natural file end fires
+      // 'ended' before timeupdate ever reports a time inside the threshold.
+      if (v.ended || projectSec >= total - 0.05) seekProject(0)
       // Tracks intent rather than element state: the element is paused between
       // clips while the next source loads, and again when one ends.
       wantPlay.current = true
