@@ -446,6 +446,11 @@ export interface Clip {
   /** This clip's own audio level. 1 = unchanged. */
   volume?: number
   colour?: ColourAdjust
+  /**
+   * Playback rate. 0.5 is half speed, 2 is double. Changes how long the clip
+   * occupies the timeline, so anything measuring duration must divide by it.
+   */
+  speed?: number
   /** Preset the layout came from, and whether it has since been edited. */
   activePreset: string | null
   presetDirty: boolean
@@ -507,9 +512,26 @@ export function splitClip(clip: Clip, atSourceSec: number): [Clip, Clip] | null 
   return [head, tail]
 }
 
+export const SPEED_STEPS = [0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4]
+
+export function clipSpeed(clip: Clip): number {
+  const s = clip.speed ?? 1
+  return s > 0 ? s : 1
+}
+
+/**
+ * How long a clip occupies the timeline once its speed is applied.
+ *
+ * Half speed makes a 4s trim last 8s; double makes it last 2s. Everything that
+ * lays out or exports the timeline has to agree on this, so it lives here.
+ */
+export function clipTimelineDuration(clip: Clip): number {
+  return Math.max(0, clip.outSec - clip.inSec) / clipSpeed(clip)
+}
+
 /** Total runtime of the project — the sum of the trimmed clips. */
 export function projectDuration(clips: Clip[]): number {
-  return clips.reduce((n, c) => n + Math.max(0, c.outSec - c.inSec), 0)
+  return clips.reduce((n, c) => n + clipTimelineDuration(c), 0)
 }
 
 /**
@@ -622,6 +644,7 @@ export interface ProjectSegment {
   audioChannels: number
   volume?: number
   colour?: ColourAdjust
+  speed?: number
   captions?: CaptionTrack
   /** Overlays intersecting this segment, already converted to source time. */
   texts?: TextOverlay[]
@@ -667,6 +690,8 @@ export interface CompositeExportRequest {
   /** The clip's own audio level. 1 = unchanged. */
   volume?: number
   colour?: ColourAdjust
+  /** Playback rate; the output is shorter than the trim when above 1. */
+  speed?: number
   /** Overlays for this segment, already retimed into its source clock. */
   texts?: TextOverlay[]
 }

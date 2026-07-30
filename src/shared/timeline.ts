@@ -7,6 +7,7 @@
  * so the conversion lives here rather than being re-derived per component.
  */
 import type { Clip, TextOverlay } from './types'
+import { clipSpeed, clipTimelineDuration } from './types'
 
 export interface ClipSpan {
   clip: Clip
@@ -22,7 +23,9 @@ export function layoutClips(clips: Clip[]): ClipSpan[] {
   const spans: ClipSpan[] = []
   let cursor = 0
   clips.forEach((clip, index) => {
-    const duration = Math.max(0, clip.outSec - clip.inSec)
+    // Speed changes how much of the timeline a clip covers, not how much of the
+    // source it uses, so the span is the trim divided by the rate.
+    const duration = clipTimelineDuration(clip)
     spans.push({ clip, index, start: cursor, end: cursor + duration, duration })
     cursor += duration
   })
@@ -42,12 +45,13 @@ export function resolveTime(
   // Past the end, hold on the final frame rather than returning nothing.
   const t = Math.max(0, Math.min(projectSec, totalDuration(spans) - 0.001))
   const span = spans.find((s) => t >= s.start && t < s.end) ?? spans[spans.length - 1]
-  return { span, sourceSec: span.clip.inSec + (t - span.start) }
+  // A second of timeline covers `speed` seconds of source.
+  return { span, sourceSec: span.clip.inSec + (t - span.start) * clipSpeed(span.clip) }
 }
 
 /** Project time for a position inside a clip's source. */
 export function projectTimeOf(span: ClipSpan, sourceSec: number): number {
-  return span.start + (sourceSec - span.clip.inSec)
+  return span.start + (sourceSec - span.clip.inSec) / clipSpeed(span.clip)
 }
 
 export function spanOf(spans: ClipSpan[], clipId: string): ClipSpan | null {
@@ -69,8 +73,8 @@ export function textsForSpan(span: ClipSpan, texts: TextOverlay[]): TextOverlay[
     if (to - from <= 0.02) continue
     out.push({
       ...t,
-      startSec: span.clip.inSec + (from - span.start),
-      endSec: span.clip.inSec + (to - span.start)
+      startSec: span.clip.inSec + (from - span.start) * clipSpeed(span.clip),
+      endSec: span.clip.inSec + (to - span.start) * clipSpeed(span.clip)
     })
   }
   return out

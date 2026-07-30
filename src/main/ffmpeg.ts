@@ -242,6 +242,25 @@ async function roundedMask(w: number, h: number, radius: number): Promise<string
   return outPath
 }
 
+/**
+ * atempo only accepts 0.5–2.0, so anything outside that is reached by chaining
+ * several of them. Quarter speed is two 0.5 stages; quadruple is two 2.0 stages.
+ */
+function atempoChain(speed: number): string[] {
+  const out: string[] = []
+  let remaining = speed
+  while (remaining > 2.0001) {
+    out.push('atempo=2.0')
+    remaining /= 2
+  }
+  while (remaining < 0.4999) {
+    out.push('atempo=0.5')
+    remaining *= 2
+  }
+  if (Math.abs(remaining - 1) > 0.001) out.push(`atempo=${remaining.toFixed(4)}`)
+  return out
+}
+
 /** yuv420p needs even dimensions, and crop offsets must stay inside the frame. */
 function evenClamp(value: number, max: number): number {
   const v = Math.round(value / 2) * 2
@@ -271,7 +290,16 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
   if (regions.length === 0) throw new Error('Add at least one box to the layout')
 
   const duration = Math.max(0.05, req.endSec - req.startSec)
-  const steps: string[] = [`color=c=black:s=${canvas.w}x${canvas.h}:d=${duration.toFixed(3)}[bg]`]
+  const rate = req.speed && req.speed > 0 ? req.speed : 1
+  /**
+   * What the segment lasts once retimed. `-t` caps the *output*, so a clip at
+   * double speed must be capped at half its source length or ffmpeg keeps
+   * reading past the trim to fill the time.
+   */
+  const outDuration = Math.max(0.05, duration / rate)
+  const steps: string[] = [
+    `color=c=black:s=${canvas.w}x${canvas.h}:d=${outDuration.toFixed(3)}[bg]`
+  ]
 
   /**
    * Extra ffmpeg inputs after the video, in the order they are declared. Image
@@ -287,11 +315,16 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
 
   // The grade applies to the whole clip, so it goes on once before the split
   // rather than being repeated on every layer.
+  const speed = rate
   const grade = isNeutralColour(req.colour)
     ? 'null'
     : `eq=brightness=${(req.colour?.brightness ?? 0).toFixed(3)}` +
       `:contrast=${(req.colour?.contrast ?? 1).toFixed(3)}` +
       `:saturation=${(req.colour?.saturation ?? 1).toFixed(3)}`
+
+  // setpts scales presentation times: dividing by the rate makes the clip play
+  // faster. Applied with the grade, before the split, so every layer inherits it.
+  const retime = speed === 1 ? grade : `${grade},setpts=PTS/${speed}`
 
   // Image layers draw from their own input, so only video layers are split off
   // the source; ffmpeg cannot consume one stream twice.
@@ -300,8 +333,8 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
     const labels = videoRegions.map((r) => `[s_${r.id}]`).join('')
     steps.push(
       videoRegions.length === 1
-        ? `[0:v]${grade}${labels}`
-        : `[0:v]${grade},split=${videoRegions.length}${labels}`
+        ? `[0:v]${retime}${labels}`
+        : `[0:v]${retime},split=${videoRegions.length}${labels}`
     )
   }
 
@@ -415,7 +448,7 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
   const needSilence = forJoin && req.hasAudio === false
   // Declared last, so it takes whatever index the images and masks left free.
   const silenceIndex = needSilence
-    ? addInput(['-f', 'lavfi', '-t', duration.toFixed(3), '-i', 'anullsrc=r=48000:cl=stereo'])
+    ? addInput(['-f', 'lavfi', '-t', outDuration.toFixed(3), '-i', 'anullsrc=r=48000:cl=stereo'])
     : -1
   const audioMap = needSilence ? ['-map', `${silenceIndex}:a`] : ['-map', '0:a?']
 
@@ -434,6 +467,8 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
   if (req.volume !== undefined && req.volume !== 1 && !needSilence) {
     audioFilters.push(`volume=${req.volume.toFixed(3)}`)
   }
+  // Audio has to be retimed to match, or it drifts out of sync with the picture.
+  if (speed !== 1 && !needSilence) audioFilters.push(...atempoChain(speed))
   const audioFilterArgs = audioFilters.length ? ['-af', audioFilters.join(',')] : []
 
   if (forJoin) {
@@ -447,7 +482,7 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
     '-ss', req.startSec.toFixed(3),
     '-i', req.inputPath,
     ...extraInputs,
-    '-t', duration.toFixed(3),
+    '-t', outDuration.toFixed(3),
     '-filter_complex', steps.join(';'),
     '-map', finalLabel,
     ...audioMap,
@@ -637,6 +672,7 @@ export async function runProjectExport(
         audioChannels: seg.audioChannels,
         volume: seg.volume,
         colour: seg.colour,
+        speed: seg.speed,
         texts: seg.texts
       })
 

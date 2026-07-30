@@ -266,6 +266,7 @@ function App(): JSX.Element {
   const words = active?.words ?? []
   const clipVolume = active?.volume ?? 1
   const clipColour = active?.colour ?? NEUTRAL_COLOUR
+  const clipSpeedValue = active?.speed ?? 1
   const activePreset = active?.activePreset ?? null
   const presetDirty = active?.presetDirty ?? false
 
@@ -277,6 +278,7 @@ function App(): JSX.Element {
   const setPresetDirty = makeSetter('presetDirty')
   const setClipVolume = makeSetter('volume')
   const setClipColour = makeSetter('colour')
+  const setClipSpeed = makeSetter('speed')
 
   /**
    * The clip's own level in the preview, so what you hear against the music is
@@ -286,6 +288,11 @@ function App(): JSX.Element {
   useEffect(() => {
     if (videoRef.current) videoRef.current.volume = Math.max(0, Math.min(1, clipVolume))
   }, [clipVolume, activeId])
+
+  /** Preview plays at the clip's rate, so timings feel like the export. */
+  useEffect(() => {
+    if (videoRef.current) videoRef.current.playbackRate = Math.max(0.0625, Math.min(16, clipSpeedValue))
+  }, [clipSpeedValue, activeId])
 
   /** null on 'source', which means "no compositing, just trim". */
   const canvasDims = aspect === 'source' ? null : ASPECT_DIMS[aspect]
@@ -589,6 +596,7 @@ function App(): JSX.Element {
           audioChannels: c.meta.audioChannels,
           volume: c.volume,
           colour: c.colour,
+          speed: c.speed,
           captions: trackFor(c),
           texts: textsForSpan(
             spans.find((s) => s.clip.id === c.id) ?? layoutClips([c])[0],
@@ -1300,6 +1308,9 @@ function App(): JSX.Element {
                   colour={clipColour}
                   hasAudio={Boolean(meta.hasAudio)}
                   tracks={audio}
+                  speed={clipSpeedValue}
+                  clipSourceSec={Math.max(0, outSec - inSec)}
+                  onSpeed={setClipSpeed}
                   onTrackVolume={(id, v) =>
                     setAudio((a) => a.map((t) => (t.id === id ? { ...t, volume: v } : t)))
                   }

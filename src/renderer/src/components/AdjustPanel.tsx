@@ -1,5 +1,5 @@
 import type { AudioTrack, ColourAdjust } from '../../../shared/types'
-import { NEUTRAL_COLOUR, isNeutralColour } from '../../../shared/types'
+import { NEUTRAL_COLOUR, isNeutralColour, SPEED_STEPS } from '../../../shared/types'
 import { ResetIcon } from './Icons'
 
 interface Props {
@@ -9,6 +9,10 @@ interface Props {
   hasAudio: boolean
   /** Music and effects, shown here so levels can be balanced against each other. */
   tracks: AudioTrack[]
+  speed: number
+  /** Trimmed length of the clip in source seconds, for the timing hint. */
+  clipSourceSec: number
+  onSpeed: (v: number) => void
   onVolume: (v: number) => void
   onTrackVolume: (id: string, v: number) => void
   onColour: (patch: Partial<ColourAdjust>) => void
@@ -37,6 +41,9 @@ export function AdjustPanel({
   colour,
   hasAudio,
   tracks,
+  speed,
+  clipSourceSec,
+  onSpeed,
   onVolume,
   onTrackVolume,
   onColour,
@@ -87,6 +94,30 @@ export function AdjustPanel({
           <span className="track-name">{t.fileName}</span>
         </div>
       ))}
+
+      <div className="layout-row">
+        <span className="panel-label">Speed</span>
+        <div className="aspect-picker">
+          {SPEED_STEPS.map((s) => (
+            <button
+              key={s}
+              className={`chip ${Math.abs(speed - s) < 0.001 ? 'active' : ''}`}
+              onClick={() => onSpeed(s)}
+              title={
+                s < 1 ? 'Slow motion' : s > 1 ? 'Sped up' : 'Normal speed'
+              }
+            >
+              {s}×
+            </button>
+          ))}
+        </div>
+        {Math.abs(speed - 1) > 0.001 && (
+          <span className="panel-hint inline">
+            {(clipSourceSec / speed).toFixed(1)}s on the timeline, from {clipSourceSec.toFixed(1)}s
+            of footage
+          </span>
+        )}
+      </div>
 
       <div className="layout-row">
         <span className="panel-label">Look</span>
