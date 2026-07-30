@@ -560,6 +560,48 @@ export function newAudioTrack(
   }
 }
 
+/**
+ * A piece of text laid over the video — a hook, a punchline, a label.
+ *
+ * Lives on the project with a project-time range, because text is usually
+ * placed against the finished piece rather than against whichever clip happens
+ * to be underneath it.
+ */
+export interface TextOverlay {
+  id: string
+  text: string
+  startSec: number
+  endSec: number
+  /** Centre of the text, normalised to the canvas. */
+  x: number
+  y: number
+  /** Cap height as a fraction of canvas height. */
+  size: number
+  colour: string
+  /** Filled panel behind the text, the classic meme look. */
+  boxed: boolean
+  uppercase: boolean
+  font: string
+}
+
+let textSeq = 0
+
+export function newTextOverlay(startSec: number, endSec: number): TextOverlay {
+  return {
+    id: `t${Date.now().toString(36)}${(textSeq++).toString(36)}`,
+    text: 'YOUR TEXT',
+    startSec,
+    endSec,
+    x: 0.5,
+    y: 0.18,
+    size: 0.058,
+    colour: '#ffffff',
+    boxed: false,
+    uppercase: true,
+    font: 'Arial Black'
+  }
+}
+
 /** Burned-in caption track. Absent means no captions on this export. */
 export interface CaptionTrack {
   words: CaptionWord[]
@@ -581,6 +623,8 @@ export interface ProjectSegment {
   volume?: number
   colour?: ColourAdjust
   captions?: CaptionTrack
+  /** Overlays intersecting this segment, already converted to source time. */
+  texts?: TextOverlay[]
 }
 
 export interface ProjectExportRequest {
@@ -623,6 +667,8 @@ export interface CompositeExportRequest {
   /** The clip's own audio level. 1 = unchanged. */
   volume?: number
   colour?: ColourAdjust
+  /** Overlays for this segment, already retimed into its source clock. */
+  texts?: TextOverlay[]
 }
 
 export interface ExportRequest {

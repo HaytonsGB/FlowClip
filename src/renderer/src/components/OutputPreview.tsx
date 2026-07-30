@@ -1,5 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
-import type { Region, Rect, CaptionWord, CaptionStyle, ColourAdjust } from '../../../shared/types'
+import type {
+  Region,
+  Rect,
+  CaptionWord,
+  CaptionStyle,
+  ColourAdjust,
+  TextOverlay
+} from '../../../shared/types'
 import { mediaUrl } from '../../../shared/types'
 import { groupIntoLines, wordWindows } from '../../../shared/captions'
 
@@ -13,6 +20,8 @@ interface Props {
   captionStyle?: CaptionStyle
   /** Grade for the active clip, applied to the footage only. */
   colour?: ColourAdjust
+  /** Overlays visible right now, already filtered by time. */
+  texts?: TextOverlay[]
 }
 
 /**
@@ -97,7 +106,8 @@ export function OutputPreview({
   revision,
   words,
   captionStyle,
-  colour
+  colour,
+  texts
 }: Props): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   /** Decoded image layers, kept across frames so the draw loop stays cheap. */
@@ -235,6 +245,31 @@ export function OutputPreview({
         drawCaptions(ctx, canvas, words, captionStyle, video.currentTime)
       }
 
+      // Overlays are timed in project time, which the caller resolves for us.
+      for (const t of texts ?? []) {
+        const body = t.uppercase ? t.text.toUpperCase() : t.text
+        if (!body.trim()) continue
+        const size = t.size * canvas.h
+        ctx.font = `900 ${size}px "${t.font}", "Segoe UI", sans-serif`
+        ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
+        const x = t.x * canvas.w
+        const y = t.y * canvas.h
+
+        if (t.boxed) {
+          const w = ctx.measureText(body).width
+          ctx.fillStyle = 'rgba(16,16,16,0.85)'
+          ctx.fillRect(x - w / 2 - size * 0.28, y - size * 0.72, w + size * 0.56, size * 1.44)
+        } else {
+          ctx.lineJoin = 'round'
+          ctx.lineWidth = size * 0.18
+          ctx.strokeStyle = '#000000'
+          ctx.strokeText(body, x, y)
+        }
+        ctx.fillStyle = t.colour
+        ctx.fillText(body, x, y)
+      }
+
       raf = requestAnimationFrame(draw)
     }
 
@@ -250,6 +285,7 @@ export function OutputPreview({
     words,
     captionStyle,
     colour,
+    texts,
     imagesReady
   ])
 

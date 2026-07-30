@@ -19,7 +19,7 @@ import type {
   AudioTrack,
   Rect
 } from '../shared/types'
-import { ASPECT_DIMS, isImageLayer, isNeutralColour } from '../shared/types'
+import { ASPECT_DIMS, isImageLayer, isNeutralColour, defaultCaptionStyle } from '../shared/types'
 import type { Region } from '../shared/types'
 import { writeAss, escapeFilterPath } from './captions'
 
@@ -393,8 +393,18 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
 
   let finalLabel = `[o${regions.length - 1}]`
 
-  if (req.captions && req.captions.words.length > 0) {
-    const assPath = writeAss(req.captions.words, req.captions.style, canvas, req.startSec)
+  // One subtitle pass carries both captions and text overlays, so text works
+  // whether or not the clip was transcribed.
+  const hasWords = Boolean(req.captions && req.captions.words.length > 0)
+  const hasTexts = Boolean(req.texts && req.texts.length > 0)
+  if (hasWords || hasTexts) {
+    const assPath = writeAss(
+      req.captions?.words ?? [],
+      req.captions?.style ?? defaultCaptionStyle(),
+      canvas,
+      req.startSec,
+      req.texts ?? []
+    )
     steps.push(`${finalLabel}subtitles='${escapeFilterPath(assPath)}'[cap]`)
     finalLabel = '[cap]'
   }
@@ -626,7 +636,8 @@ export async function runProjectExport(
         hasAudio: seg.hasAudio,
         audioChannels: seg.audioChannels,
         volume: seg.volume,
-        colour: seg.colour
+        colour: seg.colour,
+        texts: seg.texts
       })
 
       const base = done

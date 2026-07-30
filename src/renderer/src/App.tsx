@@ -11,7 +11,8 @@ import type {
   CaptionPreset,
   WhisperModelId,
   Clip,
-  AudioTrack
+  AudioTrack,
+  TextOverlay
 } from '../../shared/types'
 import {
   ASPECT_DIMS,
@@ -23,6 +24,7 @@ import {
   isImageLayer,
   newClip,
   newAudioTrack,
+  newTextOverlay,
   splitClip,
   canSplit,
   projectFps,
@@ -35,13 +37,16 @@ import { TranscriptPanel } from './components/TranscriptPanel'
 import { CaptionHandle } from './components/CaptionHandle'
 import { MusicPanel } from './components/MusicPanel'
 import { AdjustPanel } from './components/AdjustPanel'
+import { TextPanel } from './components/TextPanel'
+import { TextHandle } from './components/TextHandle'
 import { retimeLine, replaceLine, insertCaption } from '../../shared/captions'
 import {
   layoutClips,
   totalDuration,
   resolveTime,
   projectTimeOf,
-  spanOf
+  spanOf,
+  textsForSpan
 } from '../../shared/timeline'
 import { ProjectTimeline } from './components/ProjectTimeline'
 import { RegionRect } from './components/RegionRect'
@@ -118,6 +123,9 @@ function App(): JSX.Element {
   /** Music and effects belong to the project, since a bed runs across cuts. */
   const [audio, setAudio] = useState<AudioTrack[]>([])
   const [audioError, setAudioError] = useState<string | null>(null)
+  /** Text overlays live on the project, timed against the finished piece. */
+  const [texts, setTexts] = useState<TextOverlay[]>([])
+  const [selectedText, setSelectedText] = useState<string | null>(null)
   /** Where the project was last saved, so Ctrl+S can save in place. */
   const [projectPath, setProjectPath] = useState<string | null>(null)
   const [dirty, setDirty] = useState(false)
@@ -168,6 +176,7 @@ function App(): JSX.Element {
     setAspect(p.aspect ?? 'vertical')
     if (p.captionStyle) setCapStyle(p.captionStyle)
     setAudio(p.audio ?? [])
+    setTexts(p.texts ?? [])
     setActiveId(p.clips[0]?.id ?? null)
     setSelectedRegion(null)
     setProjectSec(0)
@@ -188,7 +197,7 @@ function App(): JSX.Element {
     async (forceDialog = false) => {
       if (!clips.length) return
       const res = await window.api.saveProject(
-        serialiseProject(clips, aspect, capStyle, audio),
+        serialiseProject(clips, aspect, capStyle, audio, texts),
         forceDialog ? undefined : (projectPath ?? undefined)
       )
       if (res.cancelled) return
@@ -200,7 +209,7 @@ function App(): JSX.Element {
         setStatus({ kind: 'error', message: res.error })
       }
     },
-    [clips, aspect, capStyle, audio, projectPath]
+    [clips, aspect, capStyle, audio, texts, projectPath]
   )
 
   const openProject = useCallback(async () => {
@@ -238,6 +247,11 @@ function App(): JSX.Element {
 
 
   const spans = useMemo(() => layoutClips(clips), [clips])
+  /** Overlays on screen at the playhead, for the canvas preview. */
+  const visibleTexts = useMemo(
+    () => texts.filter((t) => projectSec >= t.startSec && projectSec < t.endSec),
+    [texts, projectSec]
+  )
   const total = totalDuration(spans)
   /** Clip-local playhead, still what the tools and caption preview expect. */
   const current = active
@@ -280,7 +294,8 @@ function App(): JSX.Element {
    * changes what the frame looks like belongs here — grading without seeing
    * the result is guesswork.
    */
-  const showComposite = tool === 'layout' || tool === 'captions' || tool === 'adjust'
+  const showComposite =
+    tool === 'layout' || tool === 'captions' || tool === 'adjust' || tool === 'text'
   /** Region boxes are only draggable in Layout; elsewhere they would be noise. */
   const editRegions = tool === 'layout'
 
@@ -324,10 +339,10 @@ function App(): JSX.Element {
     if (!clips.length) return
     setDirty(true)
     const t = setTimeout(() => {
-      window.api.autosaveProject(serialiseProject(clips, aspect, capStyle, audio))
+      window.api.autosaveProject(serialiseProject(clips, aspect, capStyle, audio, texts))
     }, 1500)
     return () => clearTimeout(t)
-  }, [clips, aspect, capStyle, audio])
+  }, [clips, aspect, capStyle, audio, texts])
 
   useEffect(() => {
     return window.api.onExportProgress((p: ExportProgress) => {
@@ -574,7 +589,11 @@ function App(): JSX.Element {
           audioChannels: c.meta.audioChannels,
           volume: c.volume,
           colour: c.colour,
-          captions: trackFor(c)
+          captions: trackFor(c),
+          texts: textsForSpan(
+            spans.find((s) => s.clip.id === c.id) ?? layoutClips([c])[0],
+            texts
+          )
         }))
       })
     } else if (canvasDims && regions.length > 0) {
@@ -1100,7 +1119,24 @@ function App(): JSX.Element {
                     words={words}
                     captionStyle={capStyle}
                     colour={clipColour}
+                    texts={visibleTexts}
                   />
+                  {tool === 'text' &&
+                    texts.map((t) => (
+                      <TextHandle
+                        key={t.id}
+                        overlay={t}
+                        selected={selectedText === t.id}
+                        boundsRef={outFrameRef}
+                        onSelect={() => setSelectedText(t.id)}
+                        onChange={(patch) =>
+                          setTexts((ts) =>
+                            ts.map((x) => (x.id === t.id ? { ...x, ...patch } : x))
+                          )
+                        }
+                      />
+                    ))}
+
                   {tool === 'captions' && words.length > 0 && (
                     <CaptionHandle
                       style={capStyle}
@@ -1238,7 +1274,27 @@ function App(): JSX.Element {
             />
 
             <div className="row">
-              {tool === 'adjust' ? (
+              {tool === 'text' ? (
+                <TextPanel
+                  texts={texts}
+                  selectedId={selectedText}
+                  projectSec={projectSec}
+                  onAdd={() => {
+                    const t = newTextOverlay(projectSec, Math.min(total, projectSec + 3))
+                    setTexts((ts) => [...ts, t])
+                    setSelectedText(t.id)
+                  }}
+                  onSelect={setSelectedText}
+                  onPatch={(id, patch) =>
+                    setTexts((ts) => ts.map((t) => (t.id === id ? { ...t, ...patch } : t)))
+                  }
+                  onRemove={(id) => {
+                    setTexts((ts) => ts.filter((t) => t.id !== id))
+                    if (selectedText === id) setSelectedText(null)
+                  }}
+                  onSeek={seekProject}
+                />
+              ) : tool === 'adjust' ? (
                 <AdjustPanel
                   volume={clipVolume}
                   colour={clipColour}

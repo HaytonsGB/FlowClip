@@ -6,7 +6,7 @@
  * time. Everything that scrubs, plays or draws needs to convert between the two,
  * so the conversion lives here rather than being re-derived per component.
  */
-import type { Clip } from './types'
+import type { Clip, TextOverlay } from './types'
 
 export interface ClipSpan {
   clip: Clip
@@ -52,4 +52,26 @@ export function projectTimeOf(span: ClipSpan, sourceSec: number): number {
 
 export function spanOf(spans: ClipSpan[], clipId: string): ClipSpan | null {
   return spans.find((s) => s.clip.id === clipId) ?? null
+}
+
+/**
+ * The overlays visible during one clip, retimed into that clip's source time.
+ *
+ * Text is placed against the finished piece, but each clip is rendered on its
+ * own before the join, so an overlay spanning a cut has to be clipped to each
+ * side of it and shifted onto that clip's own clock.
+ */
+export function textsForSpan(span: ClipSpan, texts: TextOverlay[]): TextOverlay[] {
+  const out: TextOverlay[] = []
+  for (const t of texts) {
+    const from = Math.max(t.startSec, span.start)
+    const to = Math.min(t.endSec, span.end)
+    if (to - from <= 0.02) continue
+    out.push({
+      ...t,
+      startSec: span.clip.inSec + (from - span.start),
+      endSec: span.clip.inSec + (to - span.start)
+    })
+  }
+  return out
 }

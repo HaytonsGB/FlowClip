@@ -9,7 +9,7 @@ import { mkdirSync, writeFileSync } from 'fs'
 import { createHash } from 'crypto'
 import { join } from 'path'
 import { app } from 'electron'
-import type { CaptionWord, CaptionStyle } from '../shared/types'
+import type { CaptionWord, CaptionStyle, TextOverlay } from '../shared/types'
 import { groupIntoLines, wordWindows } from '../shared/captions'
 
 /** ASS colours are &HAABBGGRR — reversed from hex, with alpha first. */
@@ -46,7 +46,8 @@ export function buildAss(
   words: CaptionWord[],
   style: CaptionStyle,
   canvas: { w: number; h: number },
-  clipStartSec: number
+  clipStartSec: number,
+  texts: TextOverlay[] = []
 ): string {
   const fontSize = Math.round(style.size * canvas.h)
   const primary = assColour(style.colour)
@@ -67,6 +68,13 @@ export function buildAss(
     '[V4+ Styles]',
     'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
     `Style: Caption,${style.font},${fontSize},${primary},${primary},&H00000000,&H80000000,1,0,0,0,100,100,0,0,1,${style.outline},2,2,60,60,${marginV},1`,
+    // Overlays are positioned absolutely, so alignment 5 anchors them by their
+    // centre and \pos does the placing.
+    `Style: Overlay,Arial Black,${fontSize},${primary},${primary},&H00000000,&H90000000,1,0,0,0,100,100,0,0,1,4,1,5,20,20,20,1`,
+    // BorderStyle 3 fills a panel behind the text using OutlineColour. It is a
+    // style field, not something an inline override can switch on, so the boxed
+    // look needs a style of its own.
+    `Style: OverlayBox,Arial Black,${fontSize},${primary},${primary},&H00141414,&H00141414,1,0,0,0,100,100,0,0,3,10,0,5,20,20,20,1`,
     '',
     '[Events]',
     'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text'
@@ -94,6 +102,28 @@ export function buildAss(
     }
   }
 
+  // Layer 1 so overlays sit above the caption track rather than under it.
+  for (const t of texts) {
+    const body = escapeText(t.uppercase ? t.text.toUpperCase() : t.text)
+    if (!body.trim()) continue
+
+    const px = Math.round(t.x * canvas.w)
+    const py = Math.round(t.y * canvas.h)
+    const overrides = [
+      `\\pos(${px},${py})`,
+      `\\fs${Math.round(t.size * canvas.h)}`,
+      `\\c${assColour(t.colour)}`,
+      `\\fn${t.font}`
+    ].join('')
+
+    const start = t.startSec - clipStartSec
+    const end = Math.max(start + 0.05, t.endSec - clipStartSec)
+    const styleName = t.boxed ? 'OverlayBox' : 'Overlay'
+    events.push(
+      `Dialogue: 1,${assTime(start)},${assTime(end)},${styleName},,0,0,0,,{${overrides}}${body}`
+    )
+  }
+
   return [...header, ...events].join('\n')
 }
 
@@ -102,11 +132,12 @@ export function writeAss(
   words: CaptionWord[],
   style: CaptionStyle,
   canvas: { w: number; h: number },
-  clipStartSec: number
+  clipStartSec: number,
+  texts: TextOverlay[] = []
 ): string {
   const dir = join(app.getPath('temp'), 'flowclip-subs')
   mkdirSync(dir, { recursive: true })
-  const body = buildAss(words, style, canvas, clipStartSec)
+  const body = buildAss(words, style, canvas, clipStartSec, texts)
   const key = createHash('sha1').update(body).digest('hex').slice(0, 16)
   const out = join(dir, `${key}.ass`)
   writeFileSync(out, body, 'utf8')

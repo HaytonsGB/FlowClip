@@ -1526,6 +1526,38 @@ body {
   max-width: 190px;
 }
 
+/* Grab point for a text overlay on the output. */
+.text-handle {
+  position: absolute;
+  width: 15px;
+  height: 15px;
+  margin: -7.5px 0 0 -7.5px;
+  border-radius: 50%;
+  border: 2px solid rgba(7, 9, 18, 0.85);
+  background: var(--magenta);
+  box-shadow: 0 0 12px rgba(244, 114, 230, 0.8);
+  cursor: move;
+  touch-action: none;
+  z-index: 5;
+  transition: transform 0.12s;
+}
+
+.text-handle:hover,
+.text-handle.selected {
+  transform: scale(1.35);
+}
+
+.mini-select {
+  background: rgba(46, 56, 92, 0.45);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 8px;
+  outline: none;
+}
+
 .graded-dot {
   width: 7px;
   height: 7px;

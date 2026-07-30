@@ -33,7 +33,7 @@ export const TOOLS: Tool[] = [
   { id: 'captions', label: 'Captions', icon: CaptionsIcon },
   { id: 'audio', label: 'Music', icon: MusicIcon },
   { id: 'adjust', label: 'Adjust', icon: AdjustIcon },
-  { id: 'text', label: 'Text', icon: TextIcon, milestone: 'M4' },
+  { id: 'text', label: 'Text', icon: TextIcon },
   { id: 'stickers', label: 'Stickers', icon: StickerIcon, milestone: 'M4' },
   { id: 'effects', label: 'Effects', icon: EffectsIcon, milestone: 'M5' }
 ]
