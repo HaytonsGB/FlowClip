@@ -170,9 +170,11 @@ export function ProjectTimeline({
                       : 0
                   }% center`
                 }}
+                // Scrubbing a clip selects it too: seeking into a clip is what
+                // makes it the active one, so selecting separately here would
+                // only fight the seek over where the playhead lands.
                 onPointerDown={(e) => {
                   e.stopPropagation()
-                  onSelect(span.clip.id)
                   startScrub(e)
                 }}
                 title={span.clip.meta.fileName}
