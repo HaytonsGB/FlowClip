@@ -1121,14 +1121,31 @@ body {
   box-shadow: 0 0 16px rgba(34, 224, 240, 0.3);
 }
 
+/* Above the clips, which raise themselves when selected and would otherwise
+   paint straight over the playhead; below the trim handles, which need grabbing. */
 .trimbar-playhead {
   position: absolute;
-  top: 0;
-  bottom: 0;
+  top: -2px;
+  bottom: -2px;
   width: 2px;
+  z-index: 2;
   background: #fff;
   box-shadow: 0 0 10px rgba(255, 255, 255, 0.95), 0 0 20px rgba(34, 224, 240, 0.75);
   pointer-events: none;
+}
+
+/* A head on top makes the position readable at a glance on a busy filmstrip. */
+.trimbar-playhead::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  background: #fff;
+  box-shadow: 0 0 10px rgba(34, 224, 240, 0.9);
 }
 
 .trimbar-handle {
