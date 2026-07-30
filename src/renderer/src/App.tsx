@@ -1243,6 +1243,10 @@ function App(): JSX.Element {
                   volume={clipVolume}
                   colour={clipColour}
                   hasAudio={Boolean(meta.hasAudio)}
+                  tracks={audio}
+                  onTrackVolume={(id, v) =>
+                    setAudio((a) => a.map((t) => (t.id === id ? { ...t, volume: v } : t)))
+                  }
                   onVolume={setClipVolume}
                   onColour={(patch) => setClipColour({ ...clipColour, ...patch })}
                   onReset={() => {

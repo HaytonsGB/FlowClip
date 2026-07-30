@@ -1,4 +1,4 @@
-import type { ColourAdjust } from '../../../shared/types'
+import type { AudioTrack, ColourAdjust } from '../../../shared/types'
 import { NEUTRAL_COLOUR, isNeutralColour } from '../../../shared/types'
 import { ResetIcon } from './Icons'
 
@@ -7,7 +7,10 @@ interface Props {
   volume: number
   colour: ColourAdjust
   hasAudio: boolean
+  /** Music and effects, shown here so levels can be balanced against each other. */
+  tracks: AudioTrack[]
   onVolume: (v: number) => void
+  onTrackVolume: (id: string, v: number) => void
   onColour: (patch: Partial<ColourAdjust>) => void
   onReset: () => void
 }
@@ -33,14 +36,18 @@ export function AdjustPanel({
   volume,
   colour,
   hasAudio,
+  tracks,
   onVolume,
+  onTrackVolume,
   onColour,
   onReset
 }: Props): JSX.Element {
   return (
     <div className="panel">
+      {/* Every level in one place: balancing a clip against its music is the
+          whole point, and that cannot be done from two separate panels. */}
       <div className="layout-row">
-        <span className="panel-label">Audio</span>
+        <span className="panel-label">Clip</span>
         {hasAudio ? (
           <label className="mini-field wide">
             <input
@@ -56,10 +63,30 @@ export function AdjustPanel({
         ) : (
           <span className="panel-hint inline">This clip has no audio track.</span>
         )}
-        <button className="btn small ghost" onClick={onReset} title="Back to neutral">
+        <button className="btn small ghost" onClick={onReset} title="Reset this clip">
           <ResetIcon size={14} /> Reset all
         </button>
       </div>
+
+      {tracks.map((t) => (
+        <div className="layout-row" key={t.id}>
+          <span className={`panel-label track ${t.kind}`} title={t.fileName}>
+            {t.kind === 'music' ? 'Music' : 'SFX'}
+          </span>
+          <label className="mini-field wide">
+            <input
+              type="range"
+              min={0}
+              max={1.5}
+              step={0.05}
+              value={t.volume}
+              onChange={(e) => onTrackVolume(t.id, Number(e.target.value))}
+            />
+            <b className="audio-vol">{Math.round(t.volume * 100)}%</b>
+          </label>
+          <span className="track-name">{t.fileName}</span>
+        </div>
+      ))}
 
       <div className="layout-row">
         <span className="panel-label">Look</span>
@@ -115,8 +142,8 @@ export function AdjustPanel({
       </div>
 
       <p className="panel-hint">
-        Both apply to the selected clip only, so a dark take can be lifted without touching the
-        rest. Audio is set against any music laid over the top.
+        Levels and colour apply to the selected clip, so a dark or loud take can be fixed
+        without touching the rest. Music levels are shared across the project.
       </p>
     </div>
   )

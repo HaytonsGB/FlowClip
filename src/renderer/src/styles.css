@@ -1509,6 +1509,23 @@ body {
   flex: 1;
 }
 
+.panel-label.track {
+  color: var(--violet);
+}
+
+.panel-label.track.sfx {
+  color: var(--magenta);
+}
+
+.track-name {
+  font-size: 10.5px;
+  color: var(--dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 190px;
+}
+
 .graded-dot {
   width: 7px;
   height: 7px;
