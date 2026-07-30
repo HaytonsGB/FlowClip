@@ -419,26 +419,35 @@ function App(): JSX.Element {
 
   const removeClip = useCallback(
     (id: string) => {
-      setClips((cs) => {
-        const next = cs.filter((c) => c.id !== id)
-        if (id === activeId) {
-          const replacement = next[0] ?? null
-          setActiveId(replacement?.id ?? null)
-          // Park the playhead at the start of whatever survives, or the element
-          // keeps playing from wherever it was — which is inside the range that
-          // was just deleted.
-          if (replacement) pendingSeek.current = replacement.inSec
-          setProjectSec(0)
-        }
-        return next
-      })
+      const gone = clips.findIndex((c) => c.id === id)
+      if (gone < 0) return
+      const next = clips.filter((c) => c.id !== id)
+      setClips(next)
+
+      // Deleting shifts every later clip earlier, so the playhead has to be put
+      // somewhere deliberate or it keeps pointing at footage that has moved out
+      // from under it. It lands on whatever now fills the gap — the clip that
+      // took the deleted one's place, or the new last clip if it was the end.
+      // That is what "delete the bit I don't want" should feel like: the next
+      // thing to play is the next thing you see.
+      const spansAfter = layoutClips(next)
+      const target = spansAfter[Math.min(gone, spansAfter.length - 1)] ?? null
+
+      setActiveId(target?.clip.id ?? null)
+      // The element only reloads when its file changes, and after a split the
+      // two halves share one file — so without an explicit seek it carries on
+      // playing the exact range that was just deleted.
+      pendingSeek.current = target ? target.clip.inSec : null
+      setProjectSec(target ? target.start : 0)
+      setSelectedRegion(null)
+
       setStrips((s) => {
-        const next = { ...s }
-        delete next[id]
-        return next
+        const rest = { ...s }
+        delete rest[id]
+        return rest
       })
     },
-    [activeId]
+    [clips]
   )
 
   /** Cuts the clip under the playhead in two, keeping the playhead where it is. */
