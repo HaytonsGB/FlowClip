@@ -29,6 +29,7 @@ import {
   canSplit,
   projectFps,
   easeSource,
+  easedRegions,
   NEUTRAL_COLOUR,
   defaultCaptionStyle,
   CAPTION_PRESETS
@@ -272,6 +273,24 @@ function App(): JSX.Element {
   const current = active
     ? (resolveTime(spans, projectSec)?.sourceSec ?? active.inSec)
     : 0
+
+  /**
+   * The layout the output pane should draw: mid-ease while the playhead sits in
+   * a clip's ease window, and the clip's own layout everywhere else. Only the
+   * preview uses this — the editable boxes stay on the real layout, or dragging
+   * one during an ease would fight the animation.
+   */
+  const previewRegions = useMemo(() => {
+    if (!active) return []
+    const i = clips.findIndex((c) => c.id === active.id)
+    const from = easeSource(clips[i - 1], active)
+    const span = spanOf(spans, active.id)
+    const ease = active.easeSec ?? 0
+    if (!from || !span || ease <= 0) return active.regions
+    const into = projectSec - span.start
+    if (into < 0 || into >= ease) return active.regions
+    return easedRegions(from, active.regions, into / ease)
+  }, [active, clips, spans, projectSec])
 
   const meta = active?.meta ?? null
   const srcUrl = meta ? mediaUrl(meta.path) : ''
@@ -1210,7 +1229,7 @@ function App(): JSX.Element {
                 >
                   <OutputPreview
                     videoRef={videoRef}
-                    regions={regions}
+                    regions={previewRegions}
                     canvas={canvasDims}
                     revision={revision}
                     words={words}

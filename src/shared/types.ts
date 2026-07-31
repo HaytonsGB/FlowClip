@@ -479,6 +479,35 @@ function sameRect(a: Rect, b: Rect): boolean {
   )
 }
 
+function lerpRect(a: Rect, b: Rect, t: number): Rect {
+  return {
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+    w: a.w + (b.w - a.w) * t,
+    h: a.h + (b.h - a.h) * t
+  }
+}
+
+/**
+ * The layout part-way through an ease, for the preview.
+ *
+ * The conditions here deliberately mirror the ones the export applies: only
+ * cover layers drawn from the footage, and only where the slot itself has not
+ * moved. A preview that eased something the render hard-cuts would be worse
+ * than no preview at all.
+ */
+export function easedRegions(from: Region[], to: Region[], progress: number): Region[] {
+  // Smoothstep, matching the expression driving the render.
+  const p = progress <= 0 ? 0 : progress >= 1 ? 1 : progress
+  const e = p * p * (3 - 2 * p)
+  return to.map((r, i) => {
+    const a = from[i]
+    if (!a || a.source || r.source || r.fit === 'contain') return r
+    if (!sameRect(a.dst, r.dst)) return r
+    return { ...r, src: lerpRect(a.src, r.src, e) }
+  })
+}
+
 /**
  * The layout a clip should ease *from*, or null when the cut is a hard one.
  *
