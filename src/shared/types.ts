@@ -702,6 +702,71 @@ export function newAudioTrack(
  * placed against the finished piece rather than against whichever clip happens
  * to be underneath it.
  */
+/**
+ * An image laid over the video for part of its length.
+ *
+ * Project-level and timed like text, rather than a layer on one clip: a sticker
+ * is placed against the finished piece and usually wants to sit across a cut.
+ */
+export interface Sticker {
+  id: string
+  path: string
+  fileName: string
+  startSec: number
+  endSec: number
+  /** Centre of the sticker, normalised to the canvas. */
+  x: number
+  y: number
+  /** Width as a fraction of the canvas width; height follows the image. */
+  size: number
+  opacity: number
+}
+
+let stickerSeq = 0
+
+export function newSticker(
+  path: string,
+  fileName: string,
+  startSec: number,
+  endSec: number
+): Sticker {
+  return {
+    id: `k${Date.now().toString(36)}${(stickerSeq++).toString(36)}`,
+    path,
+    fileName,
+    startSec,
+    endSec,
+    x: 0.5,
+    y: 0.5,
+    size: 0.28,
+    opacity: 1
+  }
+}
+
+/**
+ * The stickers visible during one clip, retimed onto that clip's own clock.
+ *
+ * Same reasoning as text: each clip is rendered before the join, so anything
+ * spanning a cut has to be clipped to each side and shifted.
+ */
+export function stickersForSpan(
+  span: { start: number; end: number; clip: Clip },
+  stickers: Sticker[]
+): Sticker[] {
+  const out: Sticker[] = []
+  for (const s of stickers) {
+    const from = Math.max(s.startSec, span.start)
+    const to = Math.min(s.endSec, span.end)
+    if (to - from <= 0.02) continue
+    out.push({
+      ...s,
+      startSec: span.clip.inSec + (from - span.start) * clipSpeed(span.clip),
+      endSec: span.clip.inSec + (to - span.start) * clipSpeed(span.clip)
+    })
+  }
+  return out
+}
+
 export interface TextOverlay {
   id: string
   text: string
