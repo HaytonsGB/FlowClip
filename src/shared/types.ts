@@ -460,6 +460,15 @@ export interface Clip {
    * framings reads as a deliberate push in rather than a jump. 0 is a hard cut.
    */
   easeSec?: number
+  /**
+   * Seconds of crossfade between the previous clip and this one.
+   *
+   * The two overlap for that long, so the finished video is shorter than the
+   * clips laid end to end — which is what a dissolve is. Used for cuts between
+   * genuinely different moments; a cut inside continuous footage wants
+   * [[easeSec]] instead, and setting one clears the other.
+   */
+  fadeSec?: number
   /** Preset the layout came from, and whether it has since been edited. */
   activePreset: string | null
   presetDirty: boolean
@@ -468,6 +477,25 @@ export interface Clip {
 /** Long enough to read as a move, short enough not to feel slow. */
 export const DEFAULT_EASE_SEC = 0.35
 export const EASE_STEPS = [0, 0.2, 0.35, 0.6, 1]
+export const FADE_STEPS = [0, 0.25, 0.5, 1]
+
+/**
+ * How long clip `index` overlaps the one before it.
+ *
+ * Capped at half of either clip, since a dissolve longer than the material has
+ * nothing left to dissolve into, and zero for the first clip — there is nothing
+ * in front of it to fade from.
+ */
+export function fadeBefore(clips: Clip[], index: number): number {
+  if (index <= 0 || index >= clips.length) return 0
+  const want = clips[index].fadeSec ?? 0
+  if (want <= 0) return 0
+  const room = Math.min(
+    clipTimelineDuration(clips[index - 1]),
+    clipTimelineDuration(clips[index])
+  )
+  return Math.max(0, Math.min(want, room / 2))
+}
 
 /** Two rects are the same slot if nothing has moved by as much as a thousandth. */
 function sameRect(a: Rect, b: Rect): boolean {
@@ -733,9 +761,11 @@ export interface ProjectSegment {
   captions?: CaptionTrack
   /** Overlays intersecting this segment, already converted to source time. */
   texts?: TextOverlay[]
-  /** Layout to ease in from, matched to egions by position. */
+  /** Layout to ease in from, matched to `regions` by position. */
   easeFrom?: Region[]
   easeSec?: number
+  /** Crossfade into this segment from the previous one, in seconds. */
+  fadeSec?: number
 }
 
 export interface ProjectExportRequest {
@@ -782,7 +812,7 @@ export interface CompositeExportRequest {
   speed?: number
   /** Overlays for this segment, already retimed into its source clock. */
   texts?: TextOverlay[]
-  /** Layout to ease in from, matched to egions by position. */
+  /** Layout to ease in from, matched to `regions` by position. */
   easeFrom?: Region[]
   easeSec?: number
 }

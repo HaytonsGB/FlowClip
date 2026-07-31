@@ -1,5 +1,5 @@
 import type { AudioTrack, ColourAdjust } from '../../../shared/types'
-import { NEUTRAL_COLOUR, isNeutralColour, SPEED_STEPS, EASE_STEPS } from '../../../shared/types'
+import { NEUTRAL_COLOUR, isNeutralColour, SPEED_STEPS, EASE_STEPS, FADE_STEPS } from '../../../shared/types'
 import { ResetIcon } from './Icons'
 
 interface Props {
@@ -15,6 +15,11 @@ interface Props {
   /** Whether this clip follows continuous footage, so an ease is possible. */
   canEase: boolean
   onEase: (v: number) => void
+  /** Seconds of dissolve from the previous clip; 0 is a hard cut. */
+  fadeSec?: number
+  /** Whether anything precedes this clip, so a dissolve is possible. */
+  canFade: boolean
+  onFade: (v: number) => void
   /** Trimmed length of the clip in source seconds, for the timing hint. */
   clipSourceSec: number
   onSpeed: (v: number) => void
@@ -50,6 +55,9 @@ export function AdjustPanel({
   easeSec,
   canEase,
   onEase,
+  fadeSec,
+  canFade,
+  onFade,
   clipSourceSec,
   onSpeed,
   onVolume,
@@ -149,6 +157,32 @@ export function AdjustPanel({
               ? 'Reframe this clip and it will move into the new framing instead of jumping.'
               : 'Hard cut into this clip’s framing.'}
           </span>
+        </div>
+      )}
+
+      {/* Offered on any clip with something in front of it. Unlike an ease, a
+          dissolve makes sense between unrelated moments — and because the two
+          clips overlap, it shortens the finished video. */}
+      {canFade && (
+        <div className="layout-row">
+          <span className="panel-label">Crossfade</span>
+          <div className="aspect-picker">
+            {FADE_STEPS.map((s) => (
+              <button
+                key={s}
+                className={`chip ${Math.abs((fadeSec ?? 0) - s) < 0.001 ? 'active' : ''}`}
+                onClick={() => onFade(s)}
+                title={s === 0 ? 'Cut straight in' : `Dissolve from the previous clip over ${s}s`}
+              >
+                {s === 0 ? 'Cut' : `${s}s`}
+              </button>
+            ))}
+          </div>
+          {fadeSec ? (
+            <span className="panel-hint inline">
+              Overlaps the previous clip, so the video ends {fadeSec}s shorter.
+            </span>
+          ) : null}
         </div>
       )}
 

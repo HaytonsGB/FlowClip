@@ -694,6 +694,7 @@ function App(): JSX.Element {
           // shared model decides — see easeSource.
           easeFrom: easeSource(clips[i - 1], c) ?? undefined,
           easeSec: c.easeSec,
+          fadeSec: c.fadeSec,
           inputPath: c.meta.path,
           startSec: c.inSec,
           endSec: c.outSec,
@@ -1419,7 +1420,10 @@ function App(): JSX.Element {
                   speed={clipSpeedValue}
                   easeSec={active?.easeSec}
                   canEase={canEaseActive}
-                  onEase={(v) => patchClip((c) => ({ ...c, easeSec: v }))}
+                  onEase={(v) => patchClip((c) => ({ ...c, easeSec: v, fadeSec: 0 }))}
+                  fadeSec={active?.fadeSec}
+                  canFade={clips.findIndex((c) => c.id === activeId) > 0}
+                  onFade={(v) => patchClip((c) => ({ ...c, fadeSec: v, easeSec: 0 }))}
                   clipSourceSec={Math.max(0, outSec - inSec)}
                   onSpeed={setClipSpeed}
                   onTrackVolume={(id, v) =>

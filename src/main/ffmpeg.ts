@@ -872,8 +872,67 @@ export async function runProjectExport(
       : req.outputPath
     if (music.length) temps.push(joined)
 
+    const fades = req.segments.map((s, i) => (i > 0 ? Math.max(0, s.fadeSec ?? 0) : 0))
+
     if (parts.length === 1) {
       copyFileSync(parts[0], joined)
+    } else if (fades.some((f) => f > 0)) {
+      // A dissolve overlaps its neighbours, which stream copy cannot express, so
+      // any project with one is joined through a filter graph instead. Measured
+      // durations rather than intended ones: the offsets have to line up with
+      // the frames actually in the files, not with what was asked for.
+      const durations: number[] = []
+      for (const p of parts) durations.push(await probeDuration(p))
+
+      const inputs = parts.flatMap((p) => ['-i', p])
+      const steps: string[] = []
+      let v = '[0:v]'
+      let a = '[0:a]'
+      let outDur = durations[0]
+
+      for (let k = 1; k < parts.length; k++) {
+        const d = Math.min(fades[k], durations[k - 1] / 2, durations[k] / 2)
+        const nv = `[v${k}]`
+        const na = `[a${k}]`
+        if (d > 0) {
+          // xfade's offset is where the blend starts on the stream built so far.
+          const offset = Math.max(0, outDur - d)
+          steps.push(
+            `${v}[${k}:v]xfade=transition=fade:duration=${d.toFixed(3)}:` +
+              `offset=${offset.toFixed(3)}${nv}`
+          )
+          steps.push(`${a}[${k}:a]acrossfade=d=${d.toFixed(3)}${na}`)
+          outDur = outDur + durations[k] - d
+        } else {
+          steps.push(`${v}${a}[${k}:v][${k}:a]concat=n=2:v=1:a=1${nv}${na}`)
+          outDur += durations[k]
+        }
+        v = nv
+        a = na
+      }
+
+      await runFfmpeg(
+        [
+          '-hide_banner', '-y',
+          ...inputs,
+          '-filter_complex', steps.join(';'),
+          '-map', v,
+          '-map', a,
+          '-c:v', 'libx264',
+          '-preset', 'veryfast',
+          '-crf', '20',
+          '-pix_fmt', 'yuv420p',
+          '-r', String(req.fps),
+          '-c:a', 'aac',
+          '-b:a', '192k',
+          '-ar', '48000',
+          '-ac', '2',
+          '-movflags', '+faststart',
+          joined
+        ],
+        outDur,
+        (p) => onProgress({ percent: 0.9, timeSec: p.timeSec, speed: 'blending cuts' })
+      )
     } else {
       // The demuxer wants forward slashes and quoted paths, one per line.
       const listPath = join(work, `list_${Date.now().toString(36)}.txt`)
@@ -918,6 +977,22 @@ export async function runProjectExport(
   } finally {
     for (const p of [...parts, ...temps]) rmSync(p, { force: true })
   }
+}
+
+/** Actual length of a rendered segment, for lining up dissolve offsets. */
+async function probeDuration(filePath: string): Promise<number> {
+  const { ffprobePath } = toolStatus()
+  if (!ffprobePath) throw new Error('ffprobe not found')
+  const out = await new Promise<string>((resolve, reject) => {
+    execFile(
+      ffprobePath,
+      ['-v', 'error', '-show_entries', 'format=duration', '-of', 'csv=p=0', filePath],
+      (err, stdout) => (err ? reject(err) : resolve(stdout))
+    )
+  })
+  const n = Number(out.trim())
+  if (!Number.isFinite(n) || n <= 0) throw new Error(`Could not measure ${filePath}`)
+  return n
 }
 
 function runFfmpeg(

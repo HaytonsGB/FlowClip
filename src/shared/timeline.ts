@@ -7,7 +7,7 @@
  * so the conversion lives here rather than being re-derived per component.
  */
 import type { Clip, TextOverlay } from './types'
-import { clipSpeed, clipTimelineDuration } from './types'
+import { clipSpeed, clipTimelineDuration, fadeBefore } from './types'
 
 export interface ClipSpan {
   clip: Clip
@@ -26,8 +26,14 @@ export function layoutClips(clips: Clip[]): ClipSpan[] {
     // Speed changes how much of the timeline a clip covers, not how much of the
     // source it uses, so the span is the trim divided by the rate.
     const duration = clipTimelineDuration(clip)
-    spans.push({ clip, index, start: cursor, end: cursor + duration, duration })
-    cursor += duration
+    // A crossfade overlaps the clip before it, so this one starts early and the
+    // project ends up shorter than the clips laid end to end. That is what a
+    // dissolve is, and the timeline has to show it or every later position —
+    // text, music, the playhead — would sit against a length the export does
+    // not produce.
+    const start = Math.max(0, cursor - fadeBefore(clips, index))
+    spans.push({ clip, index, start, end: start + duration, duration })
+    cursor = start + duration
   })
   return spans
 }
