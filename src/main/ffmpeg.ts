@@ -289,14 +289,33 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
   const { regions, srcWidth, srcHeight, canvas } = req
   if (regions.length === 0) throw new Error('Add at least one box to the layout')
 
-  const duration = Math.max(0.05, req.endSec - req.startSec)
   const rate = req.speed && req.speed > 0 ? req.speed : 1
+
+  /**
+   * Segment bounds snapped to the output frame grid.
+   *
+   * Video cannot end part-way through a frame, so ffmpeg rounds a fractional
+   * `-t` *up* to the next whole frame. A cut at 4.017s on a 30fps timeline
+   * therefore emits 4.033s of picture while the next segment still starts at
+   * 4.017 — the overlap appears in both, and every join replays a fraction of a
+   * frame. On split footage that reads as a stutter at each cut.
+   *
+   * Snapping both ends to the frame grid makes each segment a whole number of
+   * frames that butts exactly against its neighbour.
+   */
+  const frame = 1 / (req.fps && req.fps > 0 ? req.fps : 30)
+  const snap = (sec: number): number => Math.round(sec / frame) * frame
+  const startSec = snap(req.startSec)
+  const endSec = Math.max(startSec + frame, snap(req.endSec))
+  const duration = endSec - startSec
+
   /**
    * What the segment lasts once retimed. `-t` caps the *output*, so a clip at
    * double speed must be capped at half its source length or ffmpeg keeps
-   * reading past the trim to fill the time.
+   * reading past the trim to fill the time. Snapped again because dividing by
+   * the rate can land back off the grid.
    */
-  const outDuration = Math.max(0.05, duration / rate)
+  const outDuration = Math.max(frame, snap(duration / rate))
   const steps: string[] = [
     `color=c=black:s=${canvas.w}x${canvas.h}:d=${outDuration.toFixed(3)}[bg]`
   ]
@@ -469,6 +488,15 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
   }
   // Audio has to be retimed to match, or it drifts out of sync with the picture.
   if (speed !== 1 && !needSilence) audioFilters.push(...atempoChain(speed))
+  /**
+   * Pad the audio so `-t` can cut it to exactly the video's length.
+   *
+   * Video is a whole number of frames while audio ends wherever the samples run
+   * out, leaving each segment's audio a few milliseconds short of its picture.
+   * Joined by stream copy those shortfalls accumulate — measured at 17ms per
+   * join — and the sound creeps ahead of the picture across the export.
+   */
+  if (forJoin) audioFilters.push('apad')
   const audioFilterArgs = audioFilters.length ? ['-af', audioFilters.join(',')] : []
 
   if (forJoin) {
@@ -479,10 +507,10 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
   return [
     '-hide_banner',
     '-y',
-    '-ss', req.startSec.toFixed(3),
+    '-ss', startSec.toFixed(6),
     '-i', req.inputPath,
     ...extraInputs,
-    '-t', outDuration.toFixed(3),
+    '-t', outDuration.toFixed(6),
     '-filter_complex', steps.join(';'),
     '-map', finalLabel,
     ...audioMap,
@@ -714,7 +742,15 @@ export async function runProjectExport(
           '-f', 'concat',
           '-safe', '0',
           '-i', listPath,
-          '-c', 'copy',
+          // Video is already frame-aligned, so it copies through untouched. The
+          // audio is re-encoded as one continuous stream: every segment's AAC
+          // carries its own encoder priming, and butting those together by copy
+          // leaves a small gap at each join that is audible on a hard cut.
+          '-c:v', 'copy',
+          '-c:a', 'aac',
+          '-b:a', '192k',
+          '-ar', '48000',
+          '-ac', '2',
           '-movflags', '+faststart',
           joined
         ],
