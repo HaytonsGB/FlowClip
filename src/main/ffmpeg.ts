@@ -305,6 +305,14 @@ function coverVisible(s: PixelRect, d: { w: number; h: number }): PixelRect {
   return { x: s.x, y: s.y + (s.h - h) / 2, w: s.w, h }
 }
 
+/** The largest box with `src`'s shape that fits inside the slot — what `contain` draws. */
+function containSize(src: PixelRect, d: { w: number; h: number }): { w: number; h: number } {
+  const a = src.w / src.h
+  return a > d.w / d.h
+    ? { w: d.w, h: Math.max(2, evenClamp(Math.round(d.w / a), d.h)) }
+    : { w: Math.max(2, evenClamp(Math.round(d.h * a), d.w)), h: d.h }
+}
+
 /**
  * Moves a region's framing from one crop to another over the start of a clip.
  *
@@ -330,11 +338,14 @@ function easeFilter(
   const x1 = Math.max(fromSrc.x + fromSrc.w, toSrc.x + toSrc.w)
   const y1 = Math.max(fromSrc.y + fromSrc.h, toSrc.y + toSrc.h)
 
-  let uw = Math.ceil(Math.max(x1 - x0, (y1 - y0) * aspect))
-  let uh = Math.ceil(uw / aspect)
-  // Too big to sit inside the frame at the right shape: the move would have to
-  // distort or invent picture, so let the cut stay hard instead.
-  if (uw > src.w || uh > src.h) return null
+  // Clamped to the frame rather than refused. Both framings are inside the
+  // frame, so the union always is; only expanding it to the slot's shape can
+  // spill over, and only by the difference between the two aspects. On a 16:9
+  // source in a 1080x608 slot that is a single pixel — enough to disable the
+  // ease outright if this bailed, and invisible once zoompan scales to size.
+  let uw = Math.min(src.w, Math.ceil(Math.max(x1 - x0, (y1 - y0) * aspect)))
+  let uh = Math.min(src.h, Math.ceil(uw / aspect))
+  if (uw < 2 || uh < 2) return null
   const ux = Math.round(Math.max(0, Math.min((x0 + x1) / 2 - uw / 2, src.w - uw)))
   const uy = Math.round(Math.max(0, Math.min((y0 + y1) / 2 - uh / 2, src.h - uh)))
   uw = evenClamp(uw, src.w)
@@ -465,20 +476,50 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
     // contained layer is letterboxed by `pad`, and zoompan crops rather than
     // pads, so easing one would quietly change what it shows.
     const prev = easeFrom?.[i]
-    if (prev && !prev.source && region.fit !== 'contain' && easeSec > 0 && req.fps) {
+    if (prev && !prev.source && easeSec > 0 && req.fps) {
       const before = toPixels(prev.src, srcWidth, srcHeight)
       const beforeDst = toPixels(prev.dst, canvas.w, canvas.h)
-      if (beforeDst.w === d.w && beforeDst.h === d.h) {
-        const ease = easeFilter(
-          coverVisible(before, d),
-          coverVisible(s, d),
-          d,
-          easeSec,
-          req.fps,
-          { w: srcWidth, h: srcHeight }
-        )
-        if (ease) {
+      const contain = region.fit === 'contain'
+      // A contained layer shows its whole crop, so the ease runs between the
+      // crops themselves; a cover layer only shows the part that survives the
+      // fill, so it runs between those.
+      const fromRect = contain ? before : coverVisible(before, d)
+      const toRect = contain ? s : coverVisible(s, d)
+      // Contained content is letterboxed at its own shape. That only holds
+      // still if both framings share a shape — otherwise the content box would
+      // have to resize per frame, which no filter can do.
+      const sameShape =
+        Math.abs(fromRect.w / fromRect.h - toRect.w / toRect.h) < 0.02
+      const target = contain ? containSize(toRect, d) : d
+
+      if (beforeDst.w === d.w && beforeDst.h === d.h && (!contain || sameShape)) {
+        const ease = easeFilter(fromRect, toRect, target, easeSec, req.fps, {
+          w: srcWidth,
+          h: srcHeight
+        })
+        if (ease && !contain) {
           steps.push(`${from}${ease},setsar=1[${shaped}]`)
+          await finishRegion(region, i, shaped, d)
+          continue
+        }
+        if (ease && contain && region.backdrop === 'black') {
+          steps.push(
+            `${from}${ease},pad=${d.w}:${d.h}:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1[${shaped}]`
+          )
+          await finishRegion(region, i, shaped, d)
+          continue
+        }
+        if (ease && contain) {
+          // Blurred backdrop, built from the eased content so the background
+          // moves with it instead of sitting still behind a sliding picture.
+          const bw = Math.max(16, evenClamp(d.w / 8, d.w))
+          const bh = Math.max(16, evenClamp(d.h / 8, d.h))
+          steps.push(`${from}${ease},setsar=1,split=2[ea${i}][eb${i}]`)
+          steps.push(
+            `[ea${i}]scale=${bw}:${bh}:force_original_aspect_ratio=increase,crop=${bw}:${bh},` +
+              `gblur=sigma=6,scale=${d.w}:${d.h},eq=brightness=-0.07:saturation=1.1,setsar=1[bg${i}]`
+          )
+          steps.push(`[bg${i}][eb${i}]overlay=(W-w)/2:(H-h)/2[${shaped}]`)
           await finishRegion(region, i, shaped, d)
           continue
         }

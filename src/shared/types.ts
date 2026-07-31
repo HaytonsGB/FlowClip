@@ -502,7 +502,14 @@ export function easedRegions(from: Region[], to: Region[], progress: number): Re
   const e = p * p * (3 - 2 * p)
   return to.map((r, i) => {
     const a = from[i]
-    if (!a || a.source || r.source || r.fit === 'contain') return r
+    if (!a || a.source || r.source) return r
+    // A fitted layer keeps its own shape, so it only eases when both framings
+    // share one — matching the condition the render applies.
+    if (r.fit === 'contain') {
+      const from = a.src.w / a.src.h
+      const to = r.src.w / r.src.h
+      if (Math.abs(from - to) > 0.02) return r
+    }
     if (!sameRect(a.dst, r.dst)) return r
     return { ...r, src: lerpRect(a.src, r.src, e) }
   })
