@@ -279,6 +279,85 @@ function toPixels(rect: Rect, W: number, H: number): { x: number; y: number; w: 
   }
 }
 
+interface PixelRect {
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+/**
+ * The part of a crop a cover fill actually shows.
+ *
+ * `scale=…:increase,crop` fills the slot and throws the overflow away, so the
+ * visible rectangle is the centred part of the crop matching the slot's aspect.
+ * The ease has to move between *those*, or it would drift against the framing
+ * the rest of the export uses.
+ */
+function coverVisible(s: PixelRect, d: { w: number; h: number }): PixelRect {
+  const srcAspect = s.w / s.h
+  const dstAspect = d.w / d.h
+  if (srcAspect > dstAspect) {
+    const w = s.h * dstAspect
+    return { x: s.x + (s.w - w) / 2, y: s.y, w, h: s.h }
+  }
+  const h = s.w / dstAspect
+  return { x: s.x, y: s.y + (s.h - h) / 2, w: s.w, h }
+}
+
+/**
+ * Moves a region's framing from one crop to another over the start of a clip.
+ *
+ * `crop` cannot resize per frame — a filter's output size is fixed when the
+ * graph is configured — so the move is done with `zoompan`, which keeps the
+ * output size and varies the zoom and offset instead. Expressions run off `on`,
+ * the output frame index, and hold the destination framing once the ease ends.
+ */
+function easeFilter(
+  fromSrc: PixelRect,
+  toSrc: PixelRect,
+  d: { w: number; h: number },
+  easeSec: number,
+  fps: number,
+  src: { w: number; h: number }
+): string | null {
+  // zoompan's window is always the aspect of whatever it is handed, so the
+  // frame is first cropped to a fixed box that has the slot's shape and holds
+  // both framings. Everything after that moves inside a box of the right shape.
+  const aspect = d.w / d.h
+  const x0 = Math.min(fromSrc.x, toSrc.x)
+  const y0 = Math.min(fromSrc.y, toSrc.y)
+  const x1 = Math.max(fromSrc.x + fromSrc.w, toSrc.x + toSrc.w)
+  const y1 = Math.max(fromSrc.y + fromSrc.h, toSrc.y + toSrc.h)
+
+  let uw = Math.ceil(Math.max(x1 - x0, (y1 - y0) * aspect))
+  let uh = Math.ceil(uw / aspect)
+  // Too big to sit inside the frame at the right shape: the move would have to
+  // distort or invent picture, so let the cut stay hard instead.
+  if (uw > src.w || uh > src.h) return null
+  const ux = Math.round(Math.max(0, Math.min((x0 + x1) / 2 - uw / 2, src.w - uw)))
+  const uy = Math.round(Math.max(0, Math.min((y0 + y1) / 2 - uh / 2, src.h - uh)))
+  uw = evenClamp(uw, src.w)
+  uh = evenClamp(uh, src.h)
+
+  const frames = Math.max(1, Math.round(easeSec * fps))
+  // Smoothstep, so the move eases in and out rather than starting at full pelt.
+  const p = `min(1,on/${frames})`
+  const e = `(${p})*(${p})*(3-2*(${p}))`
+  const lerp = (a: number, b: number): string =>
+    Math.abs(a - b) < 0.01 ? b.toFixed(3) : `(${a.toFixed(3)}+${(b - a).toFixed(3)}*${e})`
+
+  // zoompan takes a window of (iw/z, ih/z) positioned at (x,y) in *input*
+  // coordinates — not in the scaled image — so the offsets are used directly.
+  const z = `(${uw}/${lerp(fromSrc.w, toSrc.w)})`
+  const x = lerp(fromSrc.x - ux, toSrc.x - ux)
+  const y = lerp(fromSrc.y - uy, toSrc.y - uy)
+  return (
+    `crop=${uw}:${uh}:${ux}:${uy},` +
+    `zoompan=z='${z}':x='${x}':y='${y}':d=1:s=${d.w}x${d.h}:fps=${fps}`
+  )
+}
+
 /**
  * Builds a filter graph that paints each region onto a blank canvas:
  * split the source once per region, crop and scale each, then overlay them in
@@ -287,6 +366,8 @@ function toPixels(rect: Rect, W: number, H: number): { x: number; y: number; w: 
  */
 export async function buildCompositeArgs(req: CompositeExportRequest): Promise<string[]> {
   const { regions, srcWidth, srcHeight, canvas } = req
+  const easeFrom = req.easeFrom
+  const easeSec = req.easeSec ?? 0
   if (regions.length === 0) throw new Error('Add at least one box to the layout')
 
   const rate = req.speed && req.speed > 0 ? req.speed : 1
@@ -378,6 +459,32 @@ export async function buildCompositeArgs(req: CompositeExportRequest): Promise<s
     const fill = `scale=${d.w}:${d.h}:force_original_aspect_ratio=increase,crop=${d.w}:${d.h}`
 
     const from = `[s_${region.id}]`
+
+    // A framing that moves into place, rather than snapping, when this clip
+    // picks up where the last one stopped. Only the cover path can do it: a
+    // contained layer is letterboxed by `pad`, and zoompan crops rather than
+    // pads, so easing one would quietly change what it shows.
+    const prev = easeFrom?.[i]
+    if (prev && !prev.source && region.fit !== 'contain' && easeSec > 0 && req.fps) {
+      const before = toPixels(prev.src, srcWidth, srcHeight)
+      const beforeDst = toPixels(prev.dst, canvas.w, canvas.h)
+      if (beforeDst.w === d.w && beforeDst.h === d.h) {
+        const ease = easeFilter(
+          coverVisible(before, d),
+          coverVisible(s, d),
+          d,
+          easeSec,
+          req.fps,
+          { w: srcWidth, h: srcHeight }
+        )
+        if (ease) {
+          steps.push(`${from}${ease},setsar=1[${shaped}]`)
+          await finishRegion(region, i, shaped, d)
+          continue
+        }
+      }
+    }
+
     if (region.fit !== 'contain') {
       steps.push(`${from}${crop},${fill},setsar=1[${shaped}]`)
     } else if (region.backdrop === 'black') {

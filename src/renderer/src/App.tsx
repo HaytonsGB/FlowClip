@@ -28,6 +28,7 @@ import {
   splitClip,
   canSplit,
   projectFps,
+  easeSource,
   NEUTRAL_COLOUR,
   defaultCaptionStyle,
   CAPTION_PRESETS
@@ -143,6 +144,20 @@ function App(): JSX.Element {
    * having to know about the project.
    */
   const active = clips.find((c) => c.id === activeId) ?? null
+
+  /**
+   * Whether an ease is available on the active clip: it has to follow footage
+   * that ran straight into it, which is what a split leaves. The control is
+   * offered on that basis alone — the ease itself stays dormant until the two
+   * sides are actually framed differently.
+   */
+  const canEaseActive = useMemo(() => {
+    const i = clips.findIndex((c) => c.id === activeId)
+    if (i <= 0) return false
+    const prev = clips[i - 1]
+    const cur = clips[i]
+    return prev.meta.path === cur.meta.path && Math.abs(prev.outSec - cur.inSec) <= 0.008
+  }, [clips, activeId])
 
   /**
    * Which clip edits apply to, held in a ref so the writers below never capture
@@ -655,7 +670,11 @@ function App(): JSX.Element {
         outputPath,
         canvas: canvasDims,
         fps: projectFps(clips),
-        segments: clips.map((c) => ({
+        segments: clips.map((c, i) => ({
+          // A framing only eases in from footage that ran into it, which the
+          // shared model decides — see easeSource.
+          easeFrom: easeSource(clips[i - 1], c) ?? undefined,
+          easeSec: c.easeSec,
           inputPath: c.meta.path,
           startSec: c.inSec,
           endSec: c.outSec,
@@ -1379,6 +1398,9 @@ function App(): JSX.Element {
                   hasAudio={Boolean(meta.hasAudio)}
                   tracks={audio}
                   speed={clipSpeedValue}
+                  easeSec={active?.easeSec}
+                  canEase={canEaseActive}
+                  onEase={(v) => patchClip((c) => ({ ...c, easeSec: v }))}
                   clipSourceSec={Math.max(0, outSec - inSec)}
                   onSpeed={setClipSpeed}
                   onTrackVolume={(id, v) =>

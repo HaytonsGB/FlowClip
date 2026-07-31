@@ -1,5 +1,5 @@
 import type { AudioTrack, ColourAdjust } from '../../../shared/types'
-import { NEUTRAL_COLOUR, isNeutralColour, SPEED_STEPS } from '../../../shared/types'
+import { NEUTRAL_COLOUR, isNeutralColour, SPEED_STEPS, EASE_STEPS } from '../../../shared/types'
 import { ResetIcon } from './Icons'
 
 interface Props {
@@ -10,6 +10,11 @@ interface Props {
   /** Music and effects, shown here so levels can be balanced against each other. */
   tracks: AudioTrack[]
   speed: number
+  /** Seconds spent moving into this clip's layout; 0 is a hard cut. */
+  easeSec?: number
+  /** Whether this clip follows continuous footage, so an ease is possible. */
+  canEase: boolean
+  onEase: (v: number) => void
   /** Trimmed length of the clip in source seconds, for the timing hint. */
   clipSourceSec: number
   onSpeed: (v: number) => void
@@ -42,6 +47,9 @@ export function AdjustPanel({
   hasAudio,
   tracks,
   speed,
+  easeSec,
+  canEase,
+  onEase,
   clipSourceSec,
   onSpeed,
   onVolume,
@@ -118,6 +126,31 @@ export function AdjustPanel({
           </span>
         )}
       </div>
+
+      {/* Only offered where it can actually do something: a cut in the middle
+          of continuous footage, which is what a split leaves behind. */}
+      {canEase && (
+        <div className="layout-row">
+          <span className="panel-label">Ease in</span>
+          <div className="aspect-picker">
+            {EASE_STEPS.map((s) => (
+              <button
+                key={s}
+                className={`chip ${Math.abs((easeSec ?? 0) - s) < 0.001 ? 'active' : ''}`}
+                onClick={() => onEase(s)}
+                title={s === 0 ? 'Cut straight to this layout' : `Move into place over ${s}s`}
+              >
+                {s === 0 ? 'Cut' : `${s}s`}
+              </button>
+            ))}
+          </div>
+          <span className="panel-hint inline">
+            {easeSec
+              ? 'Reframe this clip and it will move into the new framing instead of jumping.'
+              : 'Hard cut into this clip’s framing.'}
+          </span>
+        </div>
+      )}
 
       <div className="layout-row">
         <span className="panel-label">Look</span>

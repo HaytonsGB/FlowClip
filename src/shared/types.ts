@@ -451,9 +451,55 @@ export interface Clip {
    * occupies the timeline, so anything measuring duration must divide by it.
    */
   speed?: number
+  /**
+   * Seconds spent easing into this clip's layout from the previous clip's.
+   *
+   * Only used where the cut is continuous footage — the same file, picking up
+   * exactly where the last clip stopped — which is what a split produces. There
+   * the two sides are the same moment framed differently, so moving between the
+   * framings reads as a deliberate push in rather than a jump. 0 is a hard cut.
+   */
+  easeSec?: number
   /** Preset the layout came from, and whether it has since been edited. */
   activePreset: string | null
   presetDirty: boolean
+}
+
+/** Long enough to read as a move, short enough not to feel slow. */
+export const DEFAULT_EASE_SEC = 0.35
+export const EASE_STEPS = [0, 0.2, 0.35, 0.6, 1]
+
+/** Two rects are the same slot if nothing has moved by as much as a thousandth. */
+function sameRect(a: Rect, b: Rect): boolean {
+  return (
+    Math.abs(a.x - b.x) < 0.001 &&
+    Math.abs(a.y - b.y) < 0.001 &&
+    Math.abs(a.w - b.w) < 0.001 &&
+    Math.abs(a.h - b.h) < 0.001
+  )
+}
+
+/**
+ * The layout a clip should ease *from*, or null when the cut is a hard one.
+ *
+ * A clip can only ease from footage that actually ran into it: the same file,
+ * ending exactly where this one starts. Anything else is a genuine cut between
+ * two different moments, where sliding the framing would look like a mistake
+ * rather than a move.
+ */
+export function easeSource(prev: Clip | null | undefined, clip: Clip): Region[] | null {
+  if (!prev || !(clip.easeSec && clip.easeSec > 0)) return null
+  if (prev.meta.path !== clip.meta.path) return null
+  // Contiguous to within half a frame at 60fps.
+  if (Math.abs(prev.outSec - clip.inSec) > 0.008) return null
+  // Regions are matched by position, so the layouts have to line up.
+  if (prev.regions.length !== clip.regions.length || clip.regions.length === 0) return null
+
+  const moved = clip.regions.some((r, i) => {
+    const p = prev.regions[i]
+    return !sameRect(p.src, r.src) || !sameRect(p.dst, r.dst)
+  })
+  return moved ? prev.regions : null
 }
 
 let clipSeq = 0
@@ -506,7 +552,10 @@ export function splitClip(clip: Clip, atSourceSec: number): [Clip, Clip] | null 
     id: `c${Date.now().toString(36)}${(clipSeq++).toString(36)}`,
     inSec: atSourceSec,
     regions: cloneRegions(),
-    words: clip.words.filter((w) => w.start >= atSourceSec)
+    words: clip.words.filter((w) => w.start >= atSourceSec),
+    // Armed but dormant: both halves share a layout, so nothing eases until one
+    // of them is reframed — which is exactly when a split is worth easing.
+    easeSec: clip.easeSec ?? DEFAULT_EASE_SEC
   }
 
   return [head, tail]
@@ -648,6 +697,9 @@ export interface ProjectSegment {
   captions?: CaptionTrack
   /** Overlays intersecting this segment, already converted to source time. */
   texts?: TextOverlay[]
+  /** Layout to ease in from, matched to egions by position. */
+  easeFrom?: Region[]
+  easeSec?: number
 }
 
 export interface ProjectExportRequest {
@@ -694,6 +746,9 @@ export interface CompositeExportRequest {
   speed?: number
   /** Overlays for this segment, already retimed into its source clock. */
   texts?: TextOverlay[]
+  /** Layout to ease in from, matched to egions by position. */
+  easeFrom?: Region[]
+  easeSec?: number
 }
 
 export interface ExportRequest {
