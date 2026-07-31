@@ -28,6 +28,7 @@ import {
   splitClip,
   canSplit,
   projectFps,
+  clipSpeed,
   easeSource,
   easedRegions,
   NEUTRAL_COLOUR,
@@ -98,6 +99,8 @@ function cropGuide(
 
 function App(): JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null)
+  /** The incoming clip of a dissolve, and the next clip pre-decoded. */
+  const videoBRef = useRef<HTMLVideoElement>(null)
   const [tools, setTools] = useState<ToolStatus | null>(null)
   /** The project: an ordered list of clips, edited one at a time. */
   const [clips, setClips] = useState<Clip[]>([])
@@ -291,6 +294,37 @@ function App(): JSX.Element {
     if (into < 0 || into >= ease) return active.regions
     return easedRegions(from, active.regions, into / ease)
   }, [active, clips, spans, projectSec])
+
+  /**
+   * The dissolve running under the playhead, if any.
+   *
+   * A crossfade overlaps two clips, so for its duration both are on screen at
+   * once. One video element cannot do that, so the incoming clip gets its own —
+   * which is also what removes the stall at a cut, since the next source is
+   * already decoded by the time the playhead reaches it.
+   */
+  const dissolve = useMemo(() => {
+    if (!active) return null
+    const span = spanOf(spans, active.id)
+    if (!span) return null
+    const next = spans[span.index + 1]
+    if (!next || next.start >= span.end - 0.001) return null
+    if (projectSec < next.start || projectSec > span.end) return null
+    const len = span.end - next.start
+    return { next, blend: len > 0 ? clamp((projectSec - next.start) / len, 0, 1) : 0 }
+  }, [active, spans, projectSec])
+
+  /** Keeps the incoming clip's element on the frame the dissolve needs. */
+  useEffect(() => {
+    const v = videoBRef.current
+    if (!v || !dissolve) return
+    const want =
+      dissolve.next.clip.inSec +
+      (projectSec - dissolve.next.start) * clipSpeed(dissolve.next.clip)
+    if (Math.abs(v.currentTime - want) > 0.08) v.currentTime = want
+    if (playing && v.paused) void v.play().catch(() => undefined)
+    if (!playing && !v.paused) v.pause()
+  }, [dissolve, projectSec, playing])
 
   const meta = active?.meta ?? null
   const srcUrl = meta ? mediaUrl(meta.path) : ''
@@ -1154,6 +1188,17 @@ function App(): JSX.Element {
               </div>
             )}
             <div className="pane-body">
+            {/* The incoming clip of a dissolve. Kept on screen at zero opacity
+                rather than display:none, which stops a video decoding — the
+                canvas needs real frames to blend, not a blank element. */}
+            <video
+              ref={videoBRef}
+              src={dissolve ? mediaUrl(dissolve.next.clip.meta.path) : undefined}
+              className="video-shadow"
+              muted
+              playsInline
+              preload="auto"
+            />
             <video
               ref={videoRef}
               src={srcUrl}
@@ -1231,6 +1276,9 @@ function App(): JSX.Element {
                   <OutputPreview
                     videoRef={videoRef}
                     regions={previewRegions}
+                    videoB={videoBRef}
+                    regionsB={dissolve?.next.clip.regions}
+                    blend={dissolve?.blend}
                     canvas={canvasDims}
                     revision={revision}
                     words={words}

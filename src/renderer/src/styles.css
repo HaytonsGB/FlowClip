@@ -1777,3 +1777,17 @@ kbd {
 ::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* The dissolve's incoming clip. Invisible but still decoding: display:none or
+   visibility:hidden stop a video producing frames, and the canvas needs real
+   ones to blend against. */
+.video-shadow {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 2px;
+  height: 2px;
+  opacity: 0.01;
+  pointer-events: none;
+  z-index: -1;
+}

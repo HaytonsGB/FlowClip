@@ -22,6 +22,10 @@ interface Props {
   colour?: ColourAdjust
   /** Overlays visible right now, already filtered by time. */
   texts?: TextOverlay[]
+  /** The incoming clip during a dissolve, and how far through it is (0..1). */
+  videoB?: React.RefObject<HTMLVideoElement>
+  regionsB?: Region[]
+  blend?: number
 }
 
 /**
@@ -107,7 +111,10 @@ export function OutputPreview({
   words,
   captionStyle,
   colour,
-  texts
+  texts,
+  videoB,
+  regionsB,
+  blend
 }: Props): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   /** Decoded image layers, kept across frames so the draw loop stays cheap. */
@@ -139,9 +146,12 @@ export function OutputPreview({
       ctx.fillStyle = '#05070f'
       ctx.fillRect(0, 0, canvas.w, canvas.h)
 
-      const vw = video.videoWidth
-      const vh = video.videoHeight
-      if (vw && vh) {
+      // Composing one clip's layers is factored out so a dissolve can run it
+      // twice — the outgoing clip, then the incoming one at the blend's opacity.
+      const paint = (v: HTMLVideoElement, rs: Region[]): void => {
+        const vw = v.videoWidth
+        const vh = v.videoHeight
+        if (!vw || !vh) return
         // Mirrors ffmpeg's eq filter. Its brightness is an offset in -1..1 while
         // the canvas filter is a multiplier around 1, hence the conversion.
         // Re-applied per layer, since an image layer clears it.
@@ -151,7 +161,7 @@ export function OutputPreview({
             `saturate(${colour.saturation.toFixed(3)})`
           : 'none'
 
-        for (const region of regions) {
+        for (const region of rs) {
           ctx.filter = grade
           const dx = region.dst.x * canvas.w
           const dy = region.dst.y * canvas.h
@@ -196,7 +206,7 @@ export function OutputPreview({
                 ctx.rect(dx, dy, dw, dh)
                 ctx.clip()
                 ctx.filter = `blur(${Math.max(4, dw / 22)}px) brightness(0.9) saturate(1.1)`
-                ctx.drawImage(video, bx, by, bw2, bh2, dx, dy, dw, dh)
+                ctx.drawImage(v, bx, by, bw2, bh2, dx, dy, dw, dh)
                 ctx.restore()
               }
 
@@ -205,7 +215,7 @@ export function OutputPreview({
               const w = sw * scale
               const h = sh * scale
               ctx.drawImage(
-                video,
+                v,
                 region.src.x * vw,
                 region.src.y * vh,
                 sw,
@@ -217,7 +227,7 @@ export function OutputPreview({
               )
             } else {
               const [sx, sy, sw, sh] = coverCrop(region.src, vw, vh, dw / dh)
-              ctx.drawImage(video, sx, sy, sw, sh, dx, dy, dw, dh)
+              ctx.drawImage(v, sx, sy, sw, sh, dx, dy, dw, dh)
             }
 
             if (border > 0) {
@@ -235,6 +245,15 @@ export function OutputPreview({
             ctx.restore()
           }
         }
+      }
+
+      paint(video, regions)
+      // The incoming clip of a dissolve, drawn over the outgoing one at the
+      // blend opacity — which composites to the same picture ffmpeg produces.
+      if (blend && blend > 0 && videoB?.current && regionsB) {
+        ctx.globalAlpha = Math.min(1, blend)
+        paint(videoB.current, regionsB)
+        ctx.globalAlpha = 1
       }
 
       // Captions and image layers are drawn ungraded — the grade belongs to the
@@ -282,6 +301,9 @@ export function OutputPreview({
     canvas.w,
     canvas.h,
     revision,
+    blend,
+    regionsB,
+    videoB,
     words,
     captionStyle,
     colour,
