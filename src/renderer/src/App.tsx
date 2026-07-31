@@ -517,6 +517,24 @@ function App(): JSX.Element {
     [spans, total, activeId]
   )
 
+  /**
+   * Selects a text overlay, moving the playhead into its window if it is not
+   * already there.
+   *
+   * Overlays are only drawn while the playhead sits inside their timing, so
+   * selecting one from outside fills the panel with settings for something the
+   * preview is not showing — which reads as the text having failed to render.
+   */
+  const selectText = useCallback(
+    (id: string | null) => {
+      setSelectedText(id)
+      if (!id) return
+      const t = texts.find((x) => x.id === id)
+      if (t && (projectSec < t.startSec || projectSec >= t.endSec)) seekProject(t.startSec)
+    },
+    [texts, projectSec, seekProject]
+  )
+
   /** Seeks using a time in the active clip's own source, which is what the
       tools and the transcript work in. */
   const seek = useCallback(
@@ -1188,7 +1206,7 @@ function App(): JSX.Element {
                         overlay={t}
                         selected={selectedText === t.id}
                         boundsRef={outFrameRef}
-                        onSelect={() => setSelectedText(t.id)}
+                        onSelect={() => selectText(t.id)}
                         onChange={(patch) =>
                           setTexts((ts) =>
                             ts.map((x) => (x.id === t.id ? { ...x, ...patch } : x))
@@ -1344,7 +1362,7 @@ function App(): JSX.Element {
                     setTexts((ts) => [...ts, t])
                     setSelectedText(t.id)
                   }}
-                  onSelect={setSelectedText}
+                  onSelect={selectText}
                   onPatch={(id, patch) =>
                     setTexts((ts) => ts.map((t) => (t.id === id ? { ...t, ...patch } : t)))
                   }
